@@ -40,11 +40,15 @@ def triangulate_dlc(arr_a, arr_b, mtx_a, dist_a, mtx_b, dist_b, p1, p2):
         ret_array[i,:,:] = cv2.triangulatePoints(p1, p2, out_a.T, out_b.T)[:3, :].T
     return ret_array
 
-def extract_anipose_3d(df, filtering=True):
+def extract_anipose_3d(csv):
+    df = pd.read_csv(csv)
     long_bp_list = df.columns
     bp_list = []
     for bodypart in long_bp_list:
         temp = bodypart.split('_')[0]
+        stop_here = 'M'
+        if temp is stop_here:
+            break
         if temp not in bp_list:
             bp_list.append(temp)
     
@@ -54,29 +58,27 @@ def extract_anipose_3d(df, filtering=True):
         ret_arr[idx, :, 0] = df[bodypart + '_x']
         ret_arr[idx, :, 1] = df[bodypart + '_y']
         ret_arr[idx, :, 2] = df[bodypart + '_z']
-    if filtering==True:
-        clear_list = df.loc[df['ScaRot_ncams'].isnull()].index.tolist()
-        for element in clear_list:
-            ret_arr[:, element, :] = np.nan
+    #if filtering==True:
+    #    clear_list = df.loc[df['ScaRot_ncams'].isnull()].index.tolist()
+    #    for element in clear_list:
+    #        ret_arr[:, element, :] = np.nan
     
     return bp_list, ret_arr
             
         
-def extract_dlc_frames(csv, threshold):
-    
-    df = pd.read_csv(csv)
-    
-    df.columns = df.iloc[0]
-    df = df.drop(0)
-    df = df.iloc[1:,1:]
-    df = df.reset_index(drop=True)
-    
-    bp_list = list(dict.fromkeys(df.columns))
+def extract_dlc_frames(df):
+    bp_list = list(dict.fromkeys(df.iloc[0]))
+    df.drop(0, inplace=True)
     coords = np.zeros((len(bp_list), len(df.index), 2))
-    for i in range(coords.shape[0]):
+    for i in range(len(bp_list)):
+        if i>0:
+            str_i = '.' + str(i)
+        else:
+            str_i = ''
         for j in range(coords.shape[1]):
-            if float(df[bp_list[i]].iloc[j,2]) > threshold:
-                coords[i,j,:] = df[bp_list[i]].iloc[j,0:2]
+            if float(df['likelihood'+str_i][j+1]) > .7:
+                coords[i, j, :] = np.array((df['x'+str_i][j+1],
+                df['y'+str_i][j+1]))
             else:
                 coords[i,j,:] = np.nan
     return bp_list, coords
