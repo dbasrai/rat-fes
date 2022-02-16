@@ -34,12 +34,31 @@ def crop_data(anipose_csv, tdt_file, np_ts, start_time, end_time):
     start_sample = round(init_start_sample + (start_time * tdt_data['fs']))
     end_sample = round(init_start_sample + (end_time * tdt_data['fs']))
 
-    print(start_sample, end_sample)
 
     temp_neural = tdt_data['neural'] #going to slice variable
+    temp_ts = tdt_data['ts']
     tdt_data['neural'] = temp_neural[:,start_sample:end_sample]
+    tdt_data['ts'] = temp_ts[start_sample:end_sample]
 
     bp_list, kinematics = extract_anipose_3d(anipose_csv)
     kinematics = kinematics[:, kin_start:kin_end,:]
 
     return tdt_data, bp_list, kinematics
+
+def crop_data_tdt(tdt_file, np_ts, start_time, end_time):
+
+    tdt_data = extract_tdt(tdt_file)
+
+    init_start_sample = get_sync_sample(np_ts, tdt_data)
+
+    start_sample = round(init_start_sample + (start_time * tdt_data['fs']))
+    end_sample = round(init_start_sample + (end_time * tdt_data['fs']))
+
+    temp_neural = tdt_data['neural'] #going to slice variable
+    tdt_data['neural'] = temp_neural[:,start_sample:end_sample]
+
+
+    return tdt_data
+
+
+

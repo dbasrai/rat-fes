@@ -39,9 +39,5 @@ def notch_filter(neural, fs):
     
     return filtfilt(b_notch, a_notch, neural)
 
-def filter_neural(neural, fs):
-    return notch_filter(bandpass_neural(neural, fs), fs)
     
-def average_neural(neural):
-    return np.divide(np.sum(neural, 0), neural.shape[0])
 
