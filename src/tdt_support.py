@@ -22,9 +22,46 @@ def get_sync_sample(np_ts, tdt_data):
     sample_number = start_time * tdt_data['fs']
     return round(sample_number)
 
-def crop_data(anipose_csv, tdt_file, np_ts, start_time, end_time):
+def extract_anipose_3d(csv):
+    df = pd.read_csv(csv)
+    long_bp_list = df.columns
+    bp_list = []
+    for bodypart in long_bp_list:
+        temp = bodypart.split('_')[0]
+        stop_here = 'M'
+        if temp is stop_here:
+            break
+        if temp not in bp_list:
+            bp_list.append(temp)
+    
+    ret_arr = np.empty((len(bp_list), df.index.size, 3))
+    
+    for idx, bodypart in enumerate(bp_list):
+        ret_arr[idx, :, 0] = df[bodypart + '_x']
+        ret_arr[idx, :, 1] = df[bodypart + '_y']
+        ret_arr[idx, :, 2] = df[bodypart + '_z']
+    #if filtering==True:
+    #    clear_list = df.loc[df['ScaRot_ncams'].isnull()].index.tolist()
+    #    for element in clear_list:
+    #        ret_arr[:, element, :] = np.nan
+    
+    return bp_list, ret_arr
+            
+def extract_anipose_angles(csv):
+    df = pd.read_csv(csv)
+    df = df.iloc[:,0:df.columns.get_loc('fnum')]
+    bp_list = df.columns.to_list()
+    angles_list = []
+    for column in df:
+        angles_list.append(df[column].to_numpy())
+
+    return bp_list, np.array(angles_list)
+
+    
+def crop_data(tdt_data, kinematics, np_ts, crop=(0,70)):
     #add in start_time/end_time in video, output cropped cortical/kin data
-    tdt_data = extract_tdt(tdt_file)
+    start_time = crop[0]
+    end_time = crop[1]
 
     kin_start = start_time*200
     kin_end = end_time*200
@@ -40,10 +77,12 @@ def crop_data(anipose_csv, tdt_file, np_ts, start_time, end_time):
     tdt_data['neural'] = temp_neural[:,start_sample:end_sample]
     tdt_data['ts'] = temp_ts[start_sample:end_sample]
 
-    bp_list, kinematics = extract_anipose_3d(anipose_csv)
-    kinematics = kinematics[:, kin_start:kin_end,:]
+    if kinematics.ndim==3:
+        kinematics = kinematics[:, kin_start:kin_end,:]
+    elif kinematics.ndim==2:
+        kinematics = kinematics[:, kin_start:kin_end]
 
-    return tdt_data, bp_list, kinematics
+    return tdt_data, kinematics
 
 def crop_data_tdt(tdt_file, np_ts, start_time, end_time):
 

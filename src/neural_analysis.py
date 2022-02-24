@@ -41,7 +41,7 @@ def autothreshold_crossings(neural, multiplier): #this finds all upwards thresho
 
     return np.array(spikes)
 
-def spike_binner(spikes, fs, binsize):
+def spike_binner(spikes, fs, binsize=0.05):
     time = 1/fs
     output_list=[]
     bin_length = int(binsize / time)
@@ -61,7 +61,7 @@ def filter_neural(neural, fs):
 def average_neural(neural):
     return np.divide(np.sum(neural, 0), neural.shape[0])
 
-def remove_artifacts(neural, fs, ts):
+def remove_artifacts(neural, fs):
 
     sum_neural = np.sum(np.abs(neural), 0)
     binsize = math.floor(0.001 * fs)
