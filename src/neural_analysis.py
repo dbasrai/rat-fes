@@ -52,8 +52,9 @@ def spike_binner(spikes, fs, binsize=0.05):
         output_list.append(binned_spikes)
         
     return np.array(output_list)
-    
 
+def bandpass_neural(neural,fs):
+    return butter_bandpass_filter(neural, 250, 3000, fs)
 
 def filter_neural(neural, fs):
     return notch_filter(bandpass_neural(neural, fs), fs)

@@ -29,8 +29,8 @@ def butter_highpass_filter(data, cutoff, fs, order=5):
     y = signal.filtfilt(b, a, data)
     return y
 
-def bandpass_neural(neural, fs):
-    return butter_bandpass_filter(neural, 250, 3000, fs)
+#def bandpass_neural(neural, fs):
+#    return butter_bandpass_filter(neural, 250, 3000, fs)
     
 def notch_filter(neural, fs):
     f0 = 60.0  # Frequency to be removed from signal (Hz)
