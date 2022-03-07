@@ -11,6 +11,7 @@ from src.filters import *
 from src.tdt_support import *
 from src.neural_analysis import *
 from src.wiener_filter import *
+from sklearn.model_selection import KFold 
 
 def process_neural_kinangles(tdt, kin, np_ts, threshold_multiplier,
         crop=(0,0), binsize=0.05):
@@ -31,14 +32,53 @@ def process_neural_kinangles(tdt, kin, np_ts, threshold_multiplier,
     return firing_rates, resampled_angles
 
 def linear_decoder(firing_rates, kinematics, n=10, l2=0):
-    rates_format, angles_format = format_data(firing_rates.T, kinematics.T, n)
+    #rates_format, angles_format = format_data(firing_rates.T, kinematics.T, n)
     h = train_wiener_filter(rates_format, angles_format, l2)
 
     return h
 
-def stitch_data(rates1, rates2, kin1, kin2):
-    rates = np.hstack((rates1, rates2))
-    kin = np.hstack((kin1, kin2))
+def decode_kfolds(rates, kins, k=10):
+    kf = KFold(n_splits=k)
+
+    h_list = []
+
+    vaf_array = np.zeros((kins.shape[1], k))
+    index=0
+    best_vaf=0
+    for train_index, test_index in kf.split(rates):
+
+
+        train_x, test_x = rates[train_index, :], rates[test_index,:]
+        train_y, test_y = kins[train_index, :], kins[test_index, :]
+
+        h=train_wiener_filter(train_x, train_y)
+        predic_y = test_wiener_filter(test_x, h)
+        
+        for j in range(predic_y.shape[1]):
+            vaf_array[j, index] = vaf(test_y[:,j], predic_y[:,j])
+            
+        if vaf_array[3, index] > best_vaf:
+            best_vaf = vaf_array[3, index]
+            best_h = h
+            final_test_x = test_x
+            final_test_y = test_y
+
+        index = index+1
+    
+    return best_h, vaf_array, final_test_x, final_test_y
+
+
+def stitch_data(rates_list, kin_list, n=10):
+    formatted_rates = []
+    formatted_angles = []
+
+    for i in range(len(rates_list)):
+        f_rate, f_angle = format_data(rates_list[i].T, kin_list[i].T, n)
+        formatted_rates.append(f_rate.T)
+        formatted_angles.append(f_angle.T)
+
+    rates = np.hstack(formatted_rates).T
+    kin = np.hstack(formatted_angles).T
     return rates, kin
 
 def extract_peaks(angles, thres_height=115):
@@ -58,7 +98,7 @@ def find_bad_gaits(peaks):
     return bads.tolist()
 
 def remove_bad_gaits(rates, angles):
-    peaks = extract_peaks(angles[1,:], 80)
+    peaks = extract_peaks(angles[3,:], 115)
     bads = find_bad_gaits(peaks)
 
     rates_list = []
