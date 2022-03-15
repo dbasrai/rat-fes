@@ -81,6 +81,8 @@ def crop_data(tdt_data, kinematics, np_ts, crop=(0,70)):
         kinematics = kinematics[:, kin_start:kin_end,:]
     elif kinematics.ndim==2:
         kinematics = kinematics[:, kin_start:kin_end]
+    elif kinematics.ndim==1:
+        kinematics = kinematics[kin_start:kin_end]
 
     return tdt_data, kinematics
 

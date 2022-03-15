@@ -35,6 +35,13 @@ def format_data(x, y, N):
         emg_N_lag.append(y[i+N-1, :])
     return np.asarray(spike_N_lag), np.asarray(emg_N_lag)
 
+def format_single_array(x, N):
+    data_N_lag = []
+    for i in range(np.size(x)-N):
+        data_N_lag.append(x[i+N-1])
+
+    return np.asarray(data_N_lag)
+
 def parameter_fit(x, y, c):
     """
     c : L2 regularization coefficient
