@@ -12,16 +12,21 @@ from src.tdt_support import *
 from src.neural_analysis import *
 from src.wiener_filter import *
 from sklearn.model_selection import KFold 
+from sklearn.linear_model import SGDClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+from sklearn.metrics import accuracy_score
 
 def process_neural_kinangles(tdt, kin_angles, np_ts, threshold_multiplier,
-        crop=(0,0), binsize=0.05, toe_height = ''):
+        crop=(0,0), binsize=0.05, toe_height_path = ''):
     tdt_data = extract_tdt(tdt)
     angles_list, kinematics = extract_anipose_angles(kin_angles)
-    if toe_height:
-        bp_list, bps = extract_anipose_3d(toe_height)
+    if toe_height_path:
+        bp_list, bps = extract_anipose_3d(toe_height_path)
         toe_height = bps[0,:,1]
         kinematics = np.vstack((kinematics, toe_height))
         ss = stance_swing_dd(toe_height)
+        kinematics = np.vstack((kinematics, ss))
     
     tdt_data, kinematics = crop_data(tdt_data, kinematics, np_ts, crop)
 
@@ -33,9 +38,23 @@ def process_neural_kinangles(tdt, kin_angles, np_ts, threshold_multiplier,
     firing_rates = spike_binner(spikes, fs, binsize)
 
     resampled_angles = resample(kinematics, firing_rates.shape[1], axis=1)
-    resampled_ss = resample(ss, firing_rates.shape[1])
-    resampled_ss = resampled_ss > 0.1
-    return firing_rates, resampled_angles, resampled_ss
+    if toe_height_path:
+        resampled_angles[-1,:] = resampled_angles[-1,:] > 0.1
+    return firing_rates, resampled_angles
+
+def convert_to_phase(limbfoot_angle):
+    peaks = extract_peaks(limbfoot_angle, 115)
+    gait_phase_list = []
+    for i in range(np.size(peaks)-1):
+        end = peaks[i+1]
+        start = peaks[i]
+
+        phase = np.sin(np.arange(0.0, 2.0*math.pi, 2.0*math.pi/(end-start)))
+        gait_phase_list.append(phase)
+    
+    starting_index = peaks[0]
+    ending_index = peaks[-1]
+    return np.hstack(gait_phase_list), starting_index, ending_index
 
 def stance_swing(toe_height):
     peaks = extract_peaks(toe_height, 12)
@@ -134,6 +153,33 @@ def decode_kfolds(rates, kins, k=10):
     
     return best_h, vaf_array, final_test_x, final_test_y
 
+
+def classify_kfolds(rates, stance_swing, k=10):
+    kf = KFold(n_splits=k)
+
+    accuracy_list = []
+    best_accuracy=0
+    clf = make_pipeline(StandardScaler(), SGDClassifier(max_iter=10000,
+       tol=1e-3))
+    best_model = clf
+    for train_index, test_index in kf.split(rates):
+
+
+        train_x, test_x = rates[train_index, :], rates[test_index,:]
+        train_y, test_y = stance_swing[train_index], stance_swing[test_index]
+
+        clf.fit(train_x, train_y)
+        y_pred = clf.predict(test_x)
+        pred_accuracy = accuracy_score(test_y, y_pred)
+        accuracy_list.append(pred_accuracy)
+        if best_accuracy < pred_accuracy:
+            best_accuracy = pred_accuracy
+            best_model = clf
+            final_test_x = test_x
+            final_test_y = test_y
+    
+    return best_model, accuracy_list, final_test_x, final_test_y
+
 def decode_kfolds_forelimb(forelimb_kins, hindlimb_kins, k=10):
     kf = KFold(n_splits=k)
 
@@ -180,20 +226,6 @@ def stitch_data(rates_list, kin_list, n=10):
     kin = np.hstack(formatted_angles).T
     return rates, kin
 
-def stitch_ss(ss_list, n=10):
-    formatted_ss = []
-
-    for i in range(len(ss_list)):
-        f_ss = format_single_array(ss_list[i], n)
-        formatted_ss.append(f_ss)
-
-    ss = np.hstack(formatted_ss)
-    return ss
-
-
-
-
-
 def extract_peaks(angles, thres_height=115):
     peaks, nada = find_peaks(angles, height=thres_height)
     return peaks
@@ -210,13 +242,12 @@ def find_bad_gaits(peaks):
 
     return bads.tolist()
 
-def remove_bad_gaits(rates, angles, peak_threshold=115, ss=[]):
+def remove_bad_gaits(rates, angles, peak_threshold=115):
     peaks = extract_peaks(angles[3,:], peak_threshold)
     bads = find_bad_gaits(peaks)
 
     rates_list = []
     angles_list = []
-    ss_list=[]
 
     for i in range(np.size(peaks)-1):
         if i in bads:
@@ -229,14 +260,10 @@ def remove_bad_gaits(rates, angles, peak_threshold=115, ss=[]):
         rates_list.append(gait_rates)
         angles_list.append(gait_angles)
 
-        if np.size(ss)>0:
-            gait_ss = ss[first:last]
-            ss_list.append(ss)
 
     rebuilt_rates = np.hstack(rates_list)
     rebuilt_angles = np.hstack(angles_list)
-    rebuilt_ss = np.hstack(ss_list)
-    return rebuilt_rates, rebuilt_angles, rebuilt_ss 
+    return rebuilt_rates, rebuilt_angles 
 
 def extract_gait(rates, angles, thres, bool_resample=False):
     peaks = extract_peaks(angles,thres)
