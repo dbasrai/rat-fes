@@ -42,19 +42,37 @@ def process_neural_kinangles(tdt, kin_angles, np_ts, threshold_multiplier,
         resampled_angles[-1,:] = resampled_angles[-1,:] > 0.1
     return firing_rates, resampled_angles
 
-def convert_to_phase(limbfoot_angle):
+def convert_to_phase(angle):
+    peaks, nada = find_peaks(angle, prominence=10)
+    peaks = np.append(peaks, np.size(angle))
+    peaks = np.insert(peaks, 0, 0)
+    gait_phase_list = []
+
+    for i in range(np.size(peaks)-1):
+        end = peaks[i+1]
+        start = peaks[i]
+
+        phase = np.sin(np.linspace(0.0, 2.0*math.pi, num=end-start,
+            endpoint=False))
+        gait_phase_list.append(phase)
+    
+    return np.hstack(gait_phase_list), gait_phase_list
+
+
+def convert_to_limbfootphase(limbfoot_angle):
     peaks = extract_peaks(limbfoot_angle, 115)
     gait_phase_list = []
     for i in range(np.size(peaks)-1):
         end = peaks[i+1]
         start = peaks[i]
 
-        phase = np.sin(np.arange(0.0, 2.0*math.pi, 2.0*math.pi/(end-start)))
+        phase = np.sin(np.linspace(0.0, 2.0*math.pi, num=end-start,
+            endpoint=False))
         gait_phase_list.append(phase)
-    
+
     starting_index = peaks[0]
     ending_index = peaks[-1]
-    return np.hstack(gait_phase_list), starting_index, ending_index
+    return np.hstack(gait_phase_list), starting_index, ending_index, peaks
 
 def stance_swing(toe_height):
     peaks = extract_peaks(toe_height, 12)
@@ -82,6 +100,26 @@ def stance_swing(toe_height):
 
     stance_swing = np.hstack(ss_list)
 
+    return stance_swing
+
+def stance_swing_forelimb(forelimb):
+    peaks, nada = find_peaks(forelimb, prominence=10)
+    peaks = np.append(peaks, np.size(forelimb))
+    peaks = np.insert(peaks, 0, 0)
+    ss_list = []
+    for i in range(np.size(peaks)-1):
+        end = peaks[i+1]
+        start = peaks[i]
+
+        temp = forelimb[start:end]
+        valley = start + np.argmin(temp)
+
+        stance = np.ones(forelimb[start:valley].shape)
+        swing = np.zeros(forelimb[valley:end].shape)
+        ss = np.hstack((stance, swing))
+        ss_list.append(ss)
+
+    stance_swing = np.hstack(ss_list)
     return stance_swing
 
 def stance_swing_dd(toe_height):
