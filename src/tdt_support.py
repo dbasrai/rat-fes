@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from src.xray import * 
 
-def extract_tdt(tdt_file):
+def deprec_extract_tdt(tdt_file):
     tdt_dict = {}
 
     data = tdt.read_block(tdt_file)
@@ -12,10 +12,44 @@ def extract_tdt(tdt_file):
     tdt_dict['ts'] = np.arange(0, tdt_dict['neural'].shape[1] / tdt_dict['fs'], 
             1/tdt_dict['fs'])
     tdt_dict['pulse_time'] = data.epocs.U11_.onset[0]
+    
+    return tdt_dict
+
+def extract_tdt(tdt_file, npts_file):
+    tdt_dict = {}
+
+    data = tdt.read_block(tdt_file)
+    tdt_dict['neural'] = data.streams.Wav1.data*1000000 #in microvolts
+    tdt_dict['fs'] = data.streams.Wav1.fs
+    tdt_dict['ts'] = np.arange(0, tdt_dict['neural'].shape[1] / tdt_dict['fs'], 
+            1/tdt_dict['fs'])
+    tdt_dict['pulse_time'] = data.epocs.U11_.onset[0]
+    
+    tdt_dict['cam_timestamps'] = np.load(npts_file)
 
     return tdt_dict
 
-def get_sync_sample(np_ts, tdt_data):
+
+
+def extract_kin_data(coords_csv, angles_csv):
+    kin_data = {}
+    bp_list, coords = extract_anipose_3d(coords_csv)
+    angles_list, angles = extract_anipose_angles(angles_csv)
+    kin_data['bodyparts'] = bp_list
+    kin_data['coords'] = coords
+    kin_data['angles_list'] = angles_list
+    kin_data['angles'] = angles
+
+    return kin_data
+
+def get_sync_sample(tdt_data):
+    cam_ts = tdt_data['cam_timestamps']
+    delay = cam_ts[1]-cam_ts[0]
+    start_time = tdt_data['pulse_time'] + delay
+    sample_number = start_time * tdt_data['fs']
+    return round(sample_number)
+
+def deprec_get_sync_sample(np_ts, tdt_data):
     cam_ts = np.load(np_ts)
     delay = cam_ts[1]-cam_ts[0]
     start_time = tdt_data['pulse_time'] + delay
@@ -57,8 +91,36 @@ def extract_anipose_angles(csv):
 
     return bp_list, np.array(angles_list)
 
+
+def crop_data(tdt_data, kin_data, crop):
+    start_time = crop[0]
+    end_time = crop[1]
+
+    kin_start = start_time*200
+    kin_end = end_time * 200
+
+    init_start_sample = get_sync_sample(tdt_data)
     
-def crop_data(tdt_data, kinematics, np_ts, crop=(0,70)):
+    start_sample = round(init_start_sample + (start_time * tdt_data['fs']))
+    end_sample = round(init_start_sample + (end_time * tdt_data['fs']))
+
+
+    temp_neural = tdt_data['neural'] #going to slice variable
+    temp_ts = tdt_data['ts']
+    tdt_data['neural'] = temp_neural[:,start_sample:end_sample]
+    tdt_data['ts'] = temp_ts[start_sample:end_sample]
+
+    temp_coords = kin_data['coords']
+    temp_angles = kin_data['angles']
+
+    kin_data['coords'] = temp_coords[:, kin_start:kin_end,:]
+    kin_data['angles'] = temp_angles[:, kin_start:kin_end]
+    #maybe need edge-case if only single angle/bodypart
+    
+    return tdt_data, kin_data
+
+
+def deprec_crop_data(tdt_data, kinematics, np_ts, crop=(0,70)):
     #add in start_time/end_time in video, output cropped cortical/kin data
     start_time = crop[0]
     end_time = crop[1]
