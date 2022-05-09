@@ -3,9 +3,6 @@ from sklearn.metrics import r2_score
 from sklearn.model_selection import KFold
 from scipy.optimize import least_squares
 
-#most of these work with transposed dimensions (samples x features)
-#format data handles our data to this format
-
 def flatten_list(X):
     """
     Converting list containing multiple ndarrays into a large ndarray
@@ -28,14 +25,14 @@ def vaf(x,xhat):
     xhat = xhat - xhat.mean(axis=0)
     return (1-(np.sum(np.square(x - xhat))/np.sum(np.square(x))))
 
-def format_data(x, y, N=10):
+def format_data(x, y, N):
     spike_N_lag = []
     emg_N_lag = []
-    for i in range(np.size(x, 1) - N):
-        temp = x[:, i:i+N]
-        temp = temp.T.reshape((np.size(temp)))
+    for i in range(np.size(x, 0) - N):
+        temp = x[i:i+N, :]
+        temp = temp.reshape((np.size(temp)))
         spike_N_lag.append(temp)
-        emg_N_lag.append(y[:, i+N-1])
+        emg_N_lag.append(y[i+N-1, :])
     return np.asarray(spike_N_lag), np.asarray(emg_N_lag)
 
 def format_single_array(x, N):

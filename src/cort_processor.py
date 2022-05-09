@@ -2,11 +2,12 @@ from src.neural_analysis import *
 from src.wiener_filter import *
 from src.folder_handler import *
 from src.tdt_support import *
+from src.decoders import *
 
 class CortProcessor:
     def __init__(self, folder_path):
         self.handler = FolderHandler(folder_path)
-
+        self.tdt_data, self.kin_data = self.extract_data()
     def extract_data(self):
         tdt_data_list = []
         raw_ts_list = self.handler.get_ts_list()
@@ -26,11 +27,14 @@ class CortProcessor:
         return tdt_data_list, kin_data_list
 
     def process(self, crop_list, threshold_multiplier = 3.0, binsize = 0.05):
-        tdt_data_list, kin_data_list = self.extract_data()
+        
+        tdt_data_list = self.tdt_data
+        kin_data_list = self.kin_data
 
         firing_rates_list = []
         resampled_angles_list = []
 
+        
         for i in range(len(tdt_data_list)):
             tdt_data, kin_data = crop_data(tdt_data_list[i], kin_data_list[i],
                     crop_list[i])
@@ -52,10 +56,34 @@ class CortProcessor:
             firing_rates_list.append(firing_rates)
             resampled_angles_list.append(resampled_angles)
 
-        
-        rates, kins = stitch_data(firing_rates_list, resampled_angles_list)
+        return firing_rates_list, resampled_angles_list
 
-        return rates, kins
+    def stitch_and_format(self, firing_rates_list, resampled_angles_list):
+        formatted_rates = []
+        formatted_angles = []
 
+        for i in range(len(firing_rates_list)):
+            f_rate, f_angle = format_data(firing_rates_list[i],
+                    resampled_angles_list[i])
+            formatted_rates.append(f_rate.T)
+            formatted_angles.append(f_angle.T)
+
+        rates = np.hstack(formatted_rates)
+        kin = np.hstack(formatted_angles)
+        #all the transpositions since hstack needs first dim to match
+        #then we flip it back around to return it
+        return rates.T, kin.T
+
+    def stitch_data(self, firing_rates_list, resampled_angles_list):
+        rates = np.hstack(firing_rates_list)
+        kin = np.hstack(resampled_angles_list)
+
+        return rates, kin
+
+    def linear_decoder(self, rates_list, kins_list):
+        X, Y = self.stitch_and_format(rates_list, kins_list)
+        h, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y)
+    
+        return h, vaf_array, final_test_x, final_test_y
    # def decode
    
