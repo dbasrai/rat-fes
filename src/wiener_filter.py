@@ -156,8 +156,13 @@ def test_nonlinear_wiener_filter(x, H, res_lsq):
     y2 = nonlinearity(res_lsq.x, y1)
     return y2    
     
-    
-    
-    
+def unformat_h(h):
+    h_flip = h.T
+    h_flip = h_flip[:,1:]
+    output=[]
 
+    for rates in h_flip:
+        output.append(np.array.split(rates, 10))
+
+    return output
 

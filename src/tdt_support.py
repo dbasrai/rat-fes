@@ -1,6 +1,7 @@
 import tdt
 import numpy as np
 import pandas as pd
+import copy
 from src.xray import * 
 
 def deprec_extract_tdt(tdt_file):
@@ -23,7 +24,7 @@ def extract_tdt(tdt_file, npts_file):
     tdt_dict['fs'] = data.streams.Wav1.fs
     tdt_dict['ts'] = np.arange(0, tdt_dict['neural'].shape[1] / tdt_dict['fs'], 
             1/tdt_dict['fs'])
-    tdt_dict['pulse_time'] = data.epocs.U11_.onset[0]
+    tdt_dict['pulse_time'] = data.epocs.Out1.onset[0]
     
     tdt_dict['cam_timestamps'] = np.load(npts_file)
 
@@ -93,6 +94,9 @@ def extract_anipose_angles(csv):
 
 
 def crop_data(tdt_data, kin_data, crop):
+    crop_tdt_data=copy.deepcopy(tdt_data)
+    crop_kin_data=copy.deepcopy(kin_data)
+
     start_time = crop[0]
     end_time = crop[1]
 
@@ -104,20 +108,20 @@ def crop_data(tdt_data, kin_data, crop):
     start_sample = round(init_start_sample + (start_time * tdt_data['fs']))
     end_sample = round(init_start_sample + (end_time * tdt_data['fs']))
 
-
     temp_neural = tdt_data['neural'] #going to slice variable
     temp_ts = tdt_data['ts']
-    tdt_data['neural'] = temp_neural[:,start_sample:end_sample]
-    tdt_data['ts'] = temp_ts[start_sample:end_sample]
+
+    crop_tdt_data['neural'] = temp_neural[:,start_sample:end_sample]
+    crop_tdt_data['ts'] = temp_ts[start_sample:end_sample]
 
     temp_coords = kin_data['coords']
     temp_angles = kin_data['angles']
 
-    kin_data['coords'] = temp_coords[:, kin_start:kin_end,:]
-    kin_data['angles'] = temp_angles[:, kin_start:kin_end]
+    crop_kin_data['coords'] = temp_coords[:, kin_start:kin_end,:]
+    crop_kin_data['angles'] = temp_angles[:, kin_start:kin_end]
     #maybe need edge-case if only single angle/bodypart
     
-    return tdt_data, kin_data
+    return crop_tdt_data, crop_kin_data
 
 
 def deprec_crop_data(tdt_data, kinematics, np_ts, crop=(0,70)):

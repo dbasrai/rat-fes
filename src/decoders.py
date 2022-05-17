@@ -13,7 +13,7 @@ def decode_kfolds(X, Y, k=10, metric =3):
 
     vaf_array = np.zeros((Y.shape[1], k))
     index=0
-    best_vaf=0
+    best_vaf=-1
     for train_index, test_index in kf.split(X):
 
 
