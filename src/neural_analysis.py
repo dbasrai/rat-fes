@@ -4,7 +4,14 @@ import numpy as np
 import pandas as pd
 from src.tdt_support import *
 from src.filters import *
+
+#i initially wrote these thinking neural is channels x samples, but more
+# standard is samples x channels. I just transpose all functions. its easier.
+
 def threshold_crossings(neural, threshold): #this finds all upwards threshold crossings, no artifact detection
+
+    neural = neural.T
+
     polarity=True #if threshold is positive
     if threshold < 0:
         polarity=False
@@ -19,15 +26,18 @@ def threshold_crossings(neural, threshold): #this finds all upwards threshold cr
         upward_indices = np.argwhere(channel)[::2,0]
         upward_indices_list.append(upward_indices)
         np.put(output[i,:], upward_indices, np.ones(upward_indices.shape))
-
-    return output, upward_indices_list
+    
+    return output.T, upward_indices_list
 
 def autothreshold_crossings(neural, multiplier): #this finds all upwards threshold crossings, no artifact detection
+    neural = neural.T
+
     polarity=True #if threshold is positive
     if multiplier < 0:
         polarity=False
     spikes = []
-
+    
+    
     for channel in neural:
         std = np.std(channel)
         if polarity:
@@ -39,9 +49,11 @@ def autothreshold_crossings(neural, multiplier): #this finds all upwards thresho
         np.put(crossings, np.where(crossings==-1), 0) #only catch crossing
         spikes.append(crossings)
 
-    return np.array(spikes)
+    return np.array(spikes).T #samples x spikes
 
 def spike_binner(spikes, fs, binsize=0.05):
+    spikes = spikes.T
+
     time = 1/fs
     output_list=[]
     bin_length = int(binsize / time)
@@ -51,18 +63,25 @@ def spike_binner(spikes, fs, binsize=0.05):
             binned_spikes.append(np.count_nonzero(channel[i:i+bin_length]) / binsize)
         output_list.append(binned_spikes)
         
-    return np.array(output_list)
+    return np.array(output_list).T
 
 def bandpass_neural(neural,fs):
-    return butter_bandpass_filter(neural, 250, 3000, fs)
+    neural = neural.T
+
+    return butter_bandpass_filter(neural, 250, 3000, fs).T
 
 def filter_neural(neural, fs):
-    return notch_filter(bandpass_neural(neural, fs), fs)
+    neural = neural.T
+
+    return notch_filter(bandpass_neural(neural, fs), fs).T
     
 def average_neural(neural):
-    return np.divide(np.sum(neural, 0), neural.shape[0])
+    neural = neural.T
+
+    return np.divide(np.sum(neural, 0), neural.shape[0]).T
 
 def remove_artifacts(neural, fs):
+    neural = neural.T
 
     sum_neural = np.sum(np.abs(neural), 0)
     binsize = math.floor(0.001 * fs)
@@ -87,4 +106,4 @@ def remove_artifacts(neural, fs):
         new_neural.append(channel)
         
     updated_neural = np.array(new_neural)
-    return updated_neural
+    return updated_neural.T

@@ -20,7 +20,7 @@ def extract_tdt(tdt_file, npts_file):
     tdt_dict = {}
 
     data = tdt.read_block(tdt_file)
-    tdt_dict['neural'] = data.streams.Wav1.data*1000000 #in microvolts
+    tdt_dict['neural'] = (data.streams.Wav1.data*1000000).T #in microvolts
     tdt_dict['fs'] = data.streams.Wav1.fs
     tdt_dict['ts'] = np.arange(0, tdt_dict['neural'].shape[1] / tdt_dict['fs'], 
             1/tdt_dict['fs'])
@@ -69,12 +69,12 @@ def extract_anipose_3d(csv):
         if temp not in bp_list:
             bp_list.append(temp)
     
-    ret_arr = np.empty((len(bp_list), df.index.size, 3))
+    ret_arr = np.empty((df.index.size, len(bp_list), 3))
     
     for idx, bodypart in enumerate(bp_list):
-        ret_arr[idx, :, 0] = df[bodypart + '_x']
-        ret_arr[idx, :, 1] = df[bodypart + '_y']
-        ret_arr[idx, :, 2] = df[bodypart + '_z']
+        ret_arr[:, idx, 0] = df[bodypart + '_x']
+        ret_arr[:, idx, 1] = df[bodypart + '_y']
+        ret_arr[:, idx, 2] = df[bodypart + '_z']
     #if filtering==True:
     #    clear_list = df.loc[df['ScaRot_ncams'].isnull()].index.tolist()
     #    for element in clear_list:
@@ -90,7 +90,7 @@ def extract_anipose_angles(csv):
     for column in df:
         angles_list.append(df[column].to_numpy())
 
-    return bp_list, np.array(angles_list)
+    return bp_list, np.array(angles_list).T
 
 
 def deprec_crop_data(tdt_data, kinematics, np_ts, crop=(0,70)):

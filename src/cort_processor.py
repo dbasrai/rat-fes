@@ -108,14 +108,14 @@ class CortProcessor:
         temp_neural = tdt_data['neural'] #going to slice variable
         temp_ts = tdt_data['ts']
 
-        crop_tdt_datafile['neural'] = temp_neural[:,start_sample:end_sample]
+        crop_tdt_datafile['neural'] = temp_neural[start_sample:end_sample,:]
         crop_tdt_datafile['ts'] = temp_ts[start_sample:end_sample]
 
         temp_coords = kin_data['coords']
         temp_angles = kin_data['angles']
 
-        crop_kin_datafile['coords'] = temp_coords[:, kin_start:kin_end,:]
-        crop_kin_datafile['angles'] = temp_angles[:, kin_start:kin_end]
+        crop_kin_datafile['coords'] = temp_coords[kin_start:kin_end,:,:]
+        crop_kin_datafile['angles'] = temp_angles[kin_start:kin_end,:]
         #maybe need edge-case if only single angle/bodypart
         
         return crop_tdt_datafile, crop_kin_datafile
