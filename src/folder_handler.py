@@ -61,9 +61,10 @@ class FolderHandler:
         time_list = []
 
         for file_name in os.listdir(angles_path):
-            subject_name = file_name.split('_')[1]
-            time_list.append(subject_name.split('-')[-1]) 
-            unsorted.append(f'{angles_path}/{file_name}')
+            if file_name.endswith('.csv'):
+                subject_name = file_name.split('_')[1]
+                time_list.append(subject_name.split('-')[-1]) 
+                unsorted.append(f'{angles_path}/{file_name}')
 
         angles_path_list = [unsorted for _, unsorted in
                 sorted(zip(time_list, unsorted))]
@@ -76,9 +77,10 @@ class FolderHandler:
         time_list = []
 
         for file_name in os.listdir(coords_path):
-            subject_name = file_name.split('_')[1]
-            time_list.append(subject_name.split('-')[-1]) 
-            unsorted.append(f'{coords_path}/{file_name}')
+            if file_name.endswith('.csv'):
+                subject_name = file_name.split('_')[1]
+                time_list.append(subject_name.split('-')[-1]) 
+                unsorted.append(f'{coords_path}/{file_name}')
 
         coords_path_list = [unsorted for _, unsorted in
                 sorted(zip(time_list, unsorted))]

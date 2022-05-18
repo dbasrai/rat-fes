@@ -93,37 +93,6 @@ def extract_anipose_angles(csv):
     return bp_list, np.array(angles_list)
 
 
-def crop_data(tdt_data, kin_data, crop):
-    crop_tdt_data=copy.deepcopy(tdt_data)
-    crop_kin_data=copy.deepcopy(kin_data)
-
-    start_time = crop[0]
-    end_time = crop[1]
-
-    kin_start = start_time*200
-    kin_end = end_time * 200
-
-    init_start_sample = get_sync_sample(tdt_data)
-    
-    start_sample = round(init_start_sample + (start_time * tdt_data['fs']))
-    end_sample = round(init_start_sample + (end_time * tdt_data['fs']))
-
-    temp_neural = tdt_data['neural'] #going to slice variable
-    temp_ts = tdt_data['ts']
-
-    crop_tdt_data['neural'] = temp_neural[:,start_sample:end_sample]
-    crop_tdt_data['ts'] = temp_ts[start_sample:end_sample]
-
-    temp_coords = kin_data['coords']
-    temp_angles = kin_data['angles']
-
-    crop_kin_data['coords'] = temp_coords[:, kin_start:kin_end,:]
-    crop_kin_data['angles'] = temp_angles[:, kin_start:kin_end]
-    #maybe need edge-case if only single angle/bodypart
-    
-    return crop_tdt_data, crop_kin_data
-
-
 def deprec_crop_data(tdt_data, kinematics, np_ts, crop=(0,70)):
     #add in start_time/end_time in video, output cropped cortical/kin data
     start_time = crop[0]
