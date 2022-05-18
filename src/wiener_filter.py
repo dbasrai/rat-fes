@@ -32,11 +32,11 @@ def format_data(x, y, N=10):
     spike_N_lag = []
     emg_N_lag = []
     for i in range(np.size(x, 1) - N):
-        temp = x[:, i:i+N]
+        temp = x[i:i+N, :]
         temp = temp.T.reshape((np.size(temp)))
         spike_N_lag.append(temp)
         if y.ndim == 2:
-            emg_N_lag.append(y[:, i+N-1])
+            emg_N_lag.append(y[i+N-1, :])
         elif y.ndim == 1:
             emg_N_lag.append(y[i+N-1])
     return np.asarray(spike_N_lag), np.asarray(emg_N_lag)

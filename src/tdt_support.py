@@ -2,7 +2,6 @@ import tdt
 import numpy as np
 import pandas as pd
 import copy
-from src.xray import * 
 
 def deprec_extract_tdt(tdt_file):
     tdt_dict = {}

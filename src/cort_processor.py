@@ -58,7 +58,8 @@ class CortProcessor:
 
             temp_angles = crop_kin_datafile['angles'] #quick accessible variable
 
-            resampled_angles = resample(temp_angles, firing_rates.shape[1], axis=1)
+            resampled_angles = resample(temp_angles, firing_rates.shape[0],
+                    axis=0)
             
             self.rate_list.append(firing_rates)
             self.angle_list.append(resampled_angles)
