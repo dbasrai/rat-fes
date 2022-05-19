@@ -1,8 +1,11 @@
+import traceback
+
 from src.neural_analysis import *
 from src.wiener_filter import *
 from src.folder_handler import *
 from src.tdt_support import *
 from src.decoders import *
+
 
 from scipy.signal import resample, find_peaks
 
@@ -10,6 +13,21 @@ class CortProcessor:
     def __init__(self, folder_path):
         self.handler = FolderHandler(folder_path)
         self.tdt_data, self.kin_data = self.extract_data()
+
+        self.crop_list = None
+
+        self.rate_list = None
+        self.angle_list = None
+
+        self.format_rates = None
+        self.format_angles = None
+
+        self.toe_height_list = None
+        self.format_toe_height = None
+
+        self.gait_indices = None
+        self.avg_gait_samples = None
+
     def extract_data(self):
         tdt_data_list = []
         raw_ts_list = self.handler.ts_list
@@ -32,20 +50,22 @@ class CortProcessor:
         
         tdt_data_list = self.tdt_data
         kin_data_list = self.kin_data
-
-        self.rate_list = []
-        self.angle_list = []
+        
+        self.crop_list = crop_list
 
         self.crop_tdt_data = []
         self.crop_kin_data = []
-        
+
+        self.rate_list = []
+        self.angle_list = []
+ 
         for i in range(len(tdt_data_list)):
             crop_tdt_datafile, crop_kin_datafile = self.crop_data(tdt_data_list[i], 
                     kin_data_list[i], crop_list[i])
             
             self.crop_tdt_data.append(crop_tdt_datafile)
             self.crop_kin_data.append(crop_kin_datafile)
-
+            
             fs = crop_tdt_datafile['fs'] #quick accessible variable
             neural = crop_tdt_datafile['neural'] #quick accessible variable
             
@@ -60,36 +80,39 @@ class CortProcessor:
 
             resampled_angles = resample(temp_angles, firing_rates.shape[0],
                     axis=0)
-            
             self.rate_list.append(firing_rates)
             self.angle_list.append(resampled_angles)
+        
             
     
         self.format_rate, self.format_angle = self.stitch_and_format(self.rate_list, 
                 self.angle_list)
 
-        return self.format_rate, self.format_angle
+        return np.vstack(self.rate_list), np.vstack(self.angle_list)
 
     def process_toe_height(self, toe_num=0):
         try:
             temp_list = []
             self.toe_height_list = []
-            minimum_toe = 1000
+            minimum_toe = 1000 #arbitrary high number to be beat
             for i in range(len(self.crop_tdt_data)):
-                toe_height = self.crop_kin_data[i]['coords'][toe_num, :, 1]
+                #find y-value of toe
+                toe_height = self.crop_kin_data[i]['coords'][:, toe_num, 1]
                 if np.min(toe_height) < minimum_toe:
                     minimum_toe = np.min(toe_height)
                 temp_list.append(toe_height)
             for i in range(len(temp_list)):
                 resampled_toe = resample(temp_list[i]-minimum_toe,
-                        self.rate_list[i].shape[1])
+                        self.rate_list[i].shape[0])
                 self.toe_height_list.append(resampled_toe)
 
             nada, self.format_toe_height = self.stitch_and_format(self.rate_list,
                     self.toe_height_list)
-        except: 
+            
+            return np.hstack(self.toe_height_list)
+        except Exception as e: 
             print('failed!! did you run process first')
-        return self.toe_height_list
+            traceback.print_exc()
 
     def crop_data(self, tdt_data, kin_data, crop):
         crop_tdt_datafile=copy.deepcopy(tdt_data)
@@ -131,18 +154,20 @@ class CortProcessor:
         for i in range(len(firing_rates_list)):
             f_rate, f_angle = format_data(firing_rates_list[i],
                     resampled_angles_list[i])
-            formatted_rates.append(f_rate.T)
-            formatted_angles.append(f_angle.T)
+            formatted_rates.append(f_rate)
+            formatted_angles.append(f_angle)
 
-        rates = np.hstack(formatted_rates)
-        kin = np.hstack(formatted_angles)
-        #all the transpositions since hstack needs first dim to match
-        #then we flip it back around to return it
-        return rates.T, kin.T
+        rates = np.vstack(formatted_rates)
+
+        if formatted_angles[0].ndim > 1:
+            kin = np.vstack(formatted_angles)
+        else:
+            kin = np.hstack(formatted_angles)
+        return rates, kin
 
     def stitch_data(self, firing_rates_list, resampled_angles_list):
-        rates = np.hstack(firing_rates_list)
-        kin = np.hstack(resampled_angles_list)
+        rates = np.vstack(firing_rates_list)
+        kin = np.vstack(resampled_angles_list)
 
         return rates, kin
 
@@ -154,17 +179,17 @@ class CortProcessor:
    
             return h_angle, vaf_array, final_test_x, final_test_y
         except:
-            print('did you run process first. looool')
+            print('did you run process() first.')
 
     def decode_toe_height(self):
-        if not hasattr(self, 'format_toe_height'):
-            print('run process_toe_height_first')
-        else:
+        try: 
             X = self.format_rate
             Y = self.format_toe_height
 
             h_toe, vaf_array, final_test_x, final_test_y = decode_kfolds_single(X, Y)
-        return h_toe, vaf_array, final_test_x, final_test_y
+            return h_toe, vaf_array, final_test_x, final_test_y
+        except:
+            print('did you run process_toe_height() yet?????')
 
     def get_gait_indices(self, limbfoot_angle=3):
         self.rate_gait = []
@@ -172,29 +197,36 @@ class CortProcessor:
 
         stitched_rates, stitched_angles = self.stitch_data(self.rate_list,
                 self.angle_list)
-        peaks, nada = find_peaks(stitched_angles[3,:], prominence=10)
-        peaks = np.append(peaks, np.size(stitched_angles[3,:])) #append the end of the array
+        peaks, nada = find_peaks(stitched_angles[:,3], prominence=10)
+        peaks = np.append(peaks, np.size(stitched_angles[:,3])) #append the end of the array
         peaks = np.insert(peaks, 0, 0) #and start it at the beginning
  
         self.gait_indices = peaks
         self.avg_gait_samples = int(np.round(np.average(np.diff(peaks))))
 
     
-    def divide_into_gaits(self, X, Y, bool_resample=True):
+    def divide_into_gaits(self, X, Y, gait_indices = None, avg_gait_samples = None,
+            bool_resample=True):
+       
+        if gait_indices is None:
+            gait_indices = self.gait_indices
+        
+        if avg_gait_samples is None:
+            avg_gait_samples = self.avg_gait_samples 
 
         X_gait = []
         Y_gait = []
 
-        for i in range(np.size(self.gait_indices)-1):
-            end = self.gait_indices[i+1]
-            start = self.gait_indices[i]
+        for i in range(np.size(gait_indices)-1):
+            end = gait_indices[i+1]
+            start = gait_indices[i]
 
-            temp_rate = X[:,start:end]
-            temp_angle = Y[:,start:end]
+            temp_rate = X[start:end,:]
+            temp_angle = Y[start:end,:]
 
             if bool_resample:
-                temp_rate = resample(temp_rate, self.avg_gait_samples, axis=1)
-                temp_angle = resample(temp_angle, self.avg_gait_samples, axis=1)
+                temp_rate = resample(temp_rate, avg_gait_samples, axis=0)
+                temp_angle = resample(temp_angle, avg_gait_samples, axis=0)
 
             X_gait.append(temp_rate)
             Y_gait.append(temp_angle)
@@ -207,17 +239,28 @@ class CortProcessor:
             gait_array = np.array(gait_rates)
             gait_array_avg = np.average(gait_array, axis=0)
             
-            channel_numbers = np.arange(0,32)
             
-            df = pd.DataFrame(gait_array_avg, index=channel_numbers)
-            self.sorted_neurons = df.iloc[df.idxmax(axis=1).argsort()]
-            temp = self.sorted_neurons.transpose()
-            self.norm_sorted_neurons=((temp-temp.min())/(temp.max()-temp.min())).transpose()
+            df = pd.DataFrame(gait_array_avg)
+            temp = df.iloc[:, df.idxmax(axis=0).argsort()]
+            self.norm_sorted_neurons=((temp-temp.min())/(temp.max()-temp.min()))
             return self.norm_sorted_neurons
 
         except:
             print('make sure you run divide into gaits first')
 
+    def convert_to_phase(self, Y, gait_indices = None):
+        phase_list = []
+        
+        if gait_indices is None:
+            gait_indices = self.gait_indices
+        for i in range(np.size(gait_indices)-1):
+            end = gait_indices[i+1]
+            start = gait_indices[i]
+            phase = np.sin(np.linspace(0.0, 2.0*math.pi, num=end-start, 
+                endpoint=False))
+            phase_list.append(gait)
+        
+        return phase_list #use np.hstack on output to get continuous
 
     def with_PCA(self, dims):
         temp_rates, nada = self.stitch_data(self.rate_list, self.angle_list)

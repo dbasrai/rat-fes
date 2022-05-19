@@ -7,8 +7,8 @@ def plot_raster(df):
     fig=plt.figure()
     ax= fig.add_subplot(111)
     ax.set_axis_off()
-    ax.table(cellColours=plt.cm.Greens(df),rowLabels = df.index,
-            colLabels = df.columns , cellLoc='center', loc = 'upper left')
+    ax.table(cellColours=plt.cm.Greens(np.array(df)),rowLabels = df.index,
+            colLabels = df.columns, cellLoc='center', loc = 'upper left')
     
 
 def plot_gait_state_space(array):

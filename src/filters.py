@@ -5,6 +5,9 @@ import pandas as pd
 from scipy.signal import butter, lfilter, iirnotch, filtfilt, resample
 from scipy.io import savemat
 
+#this is written with data as feature x samples. so I transpose so it works
+#with samples x features
+
 def butter_bandpass(lowcut, highcut, fs, order=2):
     nyq = 0.5 * fs
     low = lowcut / nyq
@@ -14,9 +17,11 @@ def butter_bandpass(lowcut, highcut, fs, order=2):
 
 
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    data = data.T
+
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
     y = lfilter(b, a, data)
-    return y
+    return y.T
 
 def butter_highpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
@@ -25,19 +30,23 @@ def butter_highpass(cutoff, fs, order=5):
     return b, a
 
 def butter_highpass_filter(data, cutoff, fs, order=5):
+    data = data.T
+
     b, a = butter_highpass(cutoff, fs, order=order)
     y = signal.filtfilt(b, a, data)
-    return y
+    return y.T
 
 #def bandpass_neural(neural, fs):
 #    return butter_bandpass_filter(neural, 250, 3000, fs)
     
 def notch_filter(neural, fs):
+    neural = neural.T
+
     f0 = 60.0  # Frequency to be removed from signal (Hz)
     Q = 30.0  # Quality factor
     b_notch, a_notch = iirnotch(f0, Q, fs)
     
-    return filtfilt(b_notch, a_notch, neural)
+    return filtfilt(b_notch, a_notch, neural).T
 
     
 

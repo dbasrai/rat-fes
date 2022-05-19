@@ -31,9 +31,9 @@ def vaf(x,xhat):
 def format_data(x, y, N=10):
     spike_N_lag = []
     emg_N_lag = []
-    for i in range(np.size(x, 1) - N):
+    for i in range(np.size(x, 0) - N):
         temp = x[i:i+N, :]
-        temp = temp.T.reshape((np.size(temp)))
+        temp = temp.reshape((np.size(temp)))
         spike_N_lag.append(temp)
         if y.ndim == 2:
             emg_N_lag.append(y[i+N-1, :])
@@ -41,7 +41,7 @@ def format_data(x, y, N=10):
             emg_N_lag.append(y[i+N-1])
     return np.asarray(spike_N_lag), np.asarray(emg_N_lag)
 
-def format_single_array(x, N):
+def format_single_array(x, N=10):
     data_N_lag = []
     for i in range(np.size(x)-N):
         data_N_lag.append(x[i+N-1])
