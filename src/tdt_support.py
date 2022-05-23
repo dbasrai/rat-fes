@@ -21,7 +21,7 @@ def extract_tdt(tdt_file, npts_file):
     data = tdt.read_block(tdt_file)
     tdt_dict['neural'] = (data.streams.Wav1.data*1000000).T #in microvolts
     tdt_dict['fs'] = data.streams.Wav1.fs
-    tdt_dict['ts'] = np.arange(0, tdt_dict['neural'].shape[1] / tdt_dict['fs'], 
+    tdt_dict['ts'] = np.arange(0, tdt_dict['neural'].shape[0] / tdt_dict['fs'], 
             1/tdt_dict['fs'])
     tdt_dict['pulse_time'] = data.epocs.Out1.onset[0]
     

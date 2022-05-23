@@ -60,14 +60,11 @@ class CortProcessor:
         self.angle_list = []
  
         for i in range(len(tdt_data_list)):
-            crop_tdt_datafile, crop_kin_datafile = self.crop_data(tdt_data_list[i], 
+            self.tdt_data[i], self.kin_data[i] = self.crop_data(tdt_data_list[i], 
                     kin_data_list[i], crop_list[i])
             
-            self.crop_tdt_data.append(crop_tdt_datafile)
-            self.crop_kin_data.append(crop_kin_datafile)
-            
-            fs = crop_tdt_datafile['fs'] #quick accessible variable
-            neural = crop_tdt_datafile['neural'] #quick accessible variable
+            fs = self.tdt_data[i]['fs'] #quick accessible variable
+            neural = self.tdt_data[i]['neural'] #quick accessible variable
             
             filtered_neural = filter_neural(neural, fs)
             clean_filtered_neural = remove_artifacts(filtered_neural, fs)
@@ -75,11 +72,26 @@ class CortProcessor:
             spikes = autothreshold_crossings(clean_filtered_neural,
                     threshold_multiplier)
             firing_rates = spike_binner(spikes, fs, binsize)
-
-            temp_angles = crop_kin_datafile['angles'] #quick accessible variable
+            
+            self.tdt_data[i]['neural'] = firing_rates
+            self.tdt_data[i]['ts'] = np.arange(0, (firing_rates.shape[0] * 
+                    .05), .05)
+            
+            temp_angles = self.kin_data[i]['angles'] #quick accessible variable
+            temp_coords = self.kin_data[i]['coords']
 
             resampled_angles = resample(temp_angles, firing_rates.shape[0],
                     axis=0)
+            resampled_coords = resample(temp_coords, firing_rates.shape[0],
+                    axis=0)
+
+            self.tdt_data[i]['crop'] = crop_list[i]
+            self.kin_data[i]['crop'] = crop_list[i]
+
+            self.kin_data[i]['angles'] = resampled_angles
+            self.kin_data[i]['coords'] = resampled_coords
+            self.kin_data[i]['ts'] = np.arange(0, (firing_rates.shape[0] *.05), .05)
+
             self.rate_list.append(firing_rates)
             self.angle_list.append(resampled_angles)
         
@@ -95,16 +107,15 @@ class CortProcessor:
             temp_list = []
             self.toe_height_list = []
             minimum_toe = 1000 #arbitrary high number to be beat
-            for i in range(len(self.crop_tdt_data)):
+            for i in range(len(self.tdt_data)):
                 #find y-value of toe
-                toe_height = self.crop_kin_data[i]['coords'][:, toe_num, 1]
+                toe_height = self.kin_data[i]['coords'][:, toe_num, 1]
                 if np.min(toe_height) < minimum_toe:
                     minimum_toe = np.min(toe_height)
                 temp_list.append(toe_height)
             for i in range(len(temp_list)):
-                resampled_toe = resample(temp_list[i]-minimum_toe,
-                        self.rate_list[i].shape[0])
-                self.toe_height_list.append(resampled_toe)
+                norm_toe_height = temp_list[i] - minimum_toe
+                self.toe_height_list.append(norm_toe_height)
 
             nada, self.format_toe_height = self.stitch_and_format(self.rate_list,
                     self.toe_height_list)
@@ -115,8 +126,8 @@ class CortProcessor:
             traceback.print_exc()
 
     def crop_data(self, tdt_data, kin_data, crop):
-        crop_tdt_datafile=copy.deepcopy(tdt_data)
-        crop_kin_datafile=copy.deepcopy(kin_data)
+        crop_tdt_datafile=tdt_data
+        crop_kin_datafile=kin_data
 
         start_time = crop[0]
         end_time = crop[1]
