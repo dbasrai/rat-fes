@@ -24,7 +24,6 @@ def process_neural_kinangles(tdt, kin_angles, np_ts, threshold_multiplier,
         ss = stance_swing_dd(toe_height)
     
     tdt_data, kinematics = crop_data(tdt_data, kinematics, np_ts, crop)
-
     fs = tdt_data['fs']
     tdt_data['neural'] = filter_neural(tdt_data['neural'], fs) #bandpass
     tdt_data['neural'] = remove_artifacts(tdt_data['neural'], fs)
