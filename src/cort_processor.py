@@ -20,17 +20,14 @@ class CortProcessor:
         if isinstance(crop, list):
             self.crop_list = crop
 
-        self.rate_list = None
-        self.angle_list = None
+        self.data['rates'] = 'run_process_first'
+        self.data['coords'] = 'run_process_first'
+        self.data['angles'] = 'run_process_first'
+        self.data['toe_height'] = 'run process first, then run process\
+                toehight'
 
-        self.format_rates = None
-        self.format_angles = None
-
-        self.toe_height_list = None
-        self.format_toe_height = None
-
-        self.gait_indices = None
-        self.avg_gait_samples = None
+        self.gait_indices = 'run get_gait_indices first'
+        self.avg_gait_samples = 'run get_gait_indices first'
 
     def parse_config(self):
         try:
@@ -66,6 +63,16 @@ class CortProcessor:
         return tdt_data_list, kin_data_list
 
     def process(self, manual_crop_list=None, threshold_multiplier = 3.0, binsize = 0.05):
+        """
+        1) takes raw neural data, then bandpass+notch filters, then extracts
+        spikes using threshold_multiplier, then bins into firing rates with bin
+        size
+        2) takes coordinates/angles, then resamples at 20 HZ
+        3) saves all under CortHandler.data
+
+        crop is automatically read from config.yaml file, unless manual crop
+        list is set.
+        """
         if self.crop_list is not None:
             crop_list = self.crop_list
         elif manual_crop_list is not None:
@@ -83,15 +90,18 @@ class CortProcessor:
         self.data['coords']=[]
         self.data['angles']=[]
         for i in range(len(tdt_data_list)):
+            #syncs neural data/kinematic data, then crops
             self.tdt_data[i], self.kin_data[i] = self.crop_data(tdt_data_list[i], 
                     kin_data_list[i], crop_list[i])
             
             fs = self.tdt_data[i]['fs'] #quick accessible variable
             neural = self.tdt_data[i]['neural'] #quick accessible variable
             
+            #notch and bandpass filter
             filtered_neural = filter_neural(neural, fs)
             clean_filtered_neural = remove_artifacts(filtered_neural, fs)
 
+            #extract spike and bin
             spikes = autothreshold_crossings(clean_filtered_neural,
                     threshold_multiplier)
             firing_rates = spike_binner(spikes, fs, binsize)
@@ -99,8 +109,9 @@ class CortProcessor:
             self.data['rates'].append(firing_rates)
 
             temp_angles = self.kin_data[i]['angles'] #quick accessible variable
-            temp_coords = self.kin_data[i]['coords']
+            temp_coords = self.kin_data[i]['coords'] 
 
+            #resample at same frequency of binned spikes
             resampled_angles = resample(temp_angles, firing_rates.shape[0],
                     axis=0)
             resampled_coords = resample(temp_coords, firing_rates.shape[0],
@@ -109,16 +120,22 @@ class CortProcessor:
             self.data['angles'].append(resampled_angles)
             self.data['coords'].append(resampled_coords)
 
+            #remove raw data to save memory
             self.tdt_data[i] = 0
             self.kin_data[i] = 0 
-            
             gc.collect()
-            #freeing memory
         
-            
+        #returning stitched rates --- we don't directly use this for anything.     
         return np.vstack(self.data['rates']), np.vstack(self.data['angles'])
 
     def process_toe_height(self, toe_num=0):
+        """
+        extracts toe height from data['coords'], then scales such that lowest
+        toe height is 0.
+
+        toe_num is which bodypart in data['coords'] is the toe. default is
+        bodypart 0
+        """
         try:
             temp_list = []
             self.data['toe_height'] = []
@@ -136,7 +153,7 @@ class CortProcessor:
             return np.hstack(self.data['toe_height'])
         except Exception as e: 
             print('failed!! did you run process first')
-            traceback.print_exc()
+            print(e)
 
     def crop_data(self, tdt_data, kin_data, crop):
         crop_tdt_datafile=tdt_data
@@ -177,6 +194,16 @@ class CortProcessor:
 
 
     def stitch_and_format(self, firing_rates_list, resampled_angles_list):
+        """
+        takes list of rates, list of angles, then converts them into lags of 10
+        using format rate in wiener_filter.py, and then stitches them into one
+        big array
+
+        both lists must have same # of elements, and each array inside list
+        must have the same size as the corresponding array in the other list.
+        """
+        assert isinstance(firing_rates_list, list), 'rates must be list'
+        assert isinstance(resampled_angles_list, list), 'angles must be list'
         formatted_rates = []
         formatted_angles = []
 
@@ -186,9 +213,15 @@ class CortProcessor:
             formatted_rates.append(f_rate)
             formatted_angles.append(f_angle)
 
-        rates = np.vstack(formatted_rates)
 
-        if formatted_angles[0].ndim > 1:
+        if len(rates)==1: #check if just single array in list
+            rates = np.array(formatted_rates)
+        else: #if multiple, stitch into single array
+            rates = np.vstack(formatted_rates)
+
+        if len(formatted_angles==1): #check if single array
+            kin = np.array(formatted_angles)
+        elif formatted_angles[0].ndim > 1: #check if multiple angles
             kin = np.vstack(formatted_angles)
         else:
             kin = np.hstack(formatted_angles)
@@ -201,6 +234,10 @@ class CortProcessor:
         return rates, kin
 
     def decode_angles(self, X=None, Y=None):
+        """
+        takes list of rates, angles, then using a wiener filter to decode. 
+        if no parameters are passed, uses data['rates'] and data['angles']
+        """
         try:
             if X is None and Y is None:
                 X, Y = self.stitch_and_format(self.data['rates'], 
@@ -228,9 +265,8 @@ class CortProcessor:
         if Y is None:
             for angles in self.data['angles']:
                 limbfoot_angles.append(angles[:,3])
-        elif isinstance(Y, np.ndarray):
-            limbfoot_angles.append(Y)
         else:
+            assert isinstance(Y, list), 'Y must be a list'
             limbfoot_angles = Y
 
         gait_indices = []
@@ -266,20 +302,15 @@ class CortProcessor:
 
         if X is None:
             rates = self.data['rates']
-        elif isinstance(X, np.ndarray):
-            rates = []
-            rates.append(X)
         else:
+            assert isinstance(X, list), 'X must be a list'
             rates = X
 
         if Y is None:
             angles = self.data['angles']
-        elif isinstance(Y, np.ndarray):
-            angles = []
-            angles.append(Y)
         else:
+            assert isinstance(Y, list), 'Y must be a list'
             angles = Y
-
 
         X_gait = []
         Y_gait = []
@@ -310,24 +341,43 @@ class CortProcessor:
 
         return X_gait, Y_gait #return list of list of lists lol
 
-    def remove_bad_gaits(self, X=None, Y=None, gait_indices=None):
+    def remove_bad_gaits(self, X=None, Y=None, gait_indices=None,
+            avg_gait_samples = None):
         if gait_indices is None:
             gait_indices = self.gait_indices
+        
+        if avg_gait_samples is None:
             avg_gait_samples = self.avg_gait_samples
-            above = 1.33 * self.avg_gait_samples
-            below = .66 * self.avg_gait_samples
-            bads_list = []
-            for idx in self.gait_indices:
+        
+        
+        above = 1.33 * avg_gait_samples
+        below = .66 * avg_gait_samples
+        bads_list = []
+        for idx in gait_indices:
 
-                bad_above = np.argwhere(np.diff(idx)>above)
-                bad_below = np.argwhere(np.diff(idx)<below)
+            bad_above = np.argwhere(np.diff(idx)>above)
+            bad_below = np.argwhere(np.diff(idx)<below)
 
-                bads_list.append(np.squeeze(np.concatenate((bad_above,
-                    bad_below))).tolist())
+            bads_list.append(np.squeeze(np.concatenate((bad_above,
+                bad_below))).tolist())
 
         if X is None:
             rates = self.data['rates']
+        elif isinstance(X, list):
+            rates = X
+        else: 
+            print('X must be list')
+            return
+
+
+        if Y is None:
             angles = self.data['angles']
+        elif isinstance(Y, list):
+            angles = Y
+        else:
+            print('Y must be list')
+            return
+
         proc_rates = []
         proc_angles = []
         for i, trial_indices in enumerate(gait_indices):
@@ -353,10 +403,8 @@ class CortProcessor:
     def neuron_tuning(self, rates_gait=None):
         try:
             if rates_gait is None:
-                temp_rates_gait = self.rates_gait
-
-                rates_gait = np.vstack(temp_rates_gait)
-
+                rates_gait = self.rates_gait
+            rates_gait = np.vstack(rates_gait)
             gait_array_avg = np.average(rates_gait, axis=0)
             df = pd.DataFrame(gait_array_avg)
             temp = df.iloc[:, df.idxmax(axis=0).argsort()]
