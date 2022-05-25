@@ -11,6 +11,11 @@ from src.decoders import *
 from scipy.signal import resample, find_peaks
 
 class CortProcessor:
+    '''
+    class that can handle neural + kinematic/EMG data simultaneously
+    upon initialization, extracts data from TDT and anipose file
+    see cort_processor.md in 'docs' for more information
+    '''
     def __init__(self, folder_path):
         self.handler = FolderHandler(folder_path)
         self.tdt_data, self.kin_data = self.extract_data()
@@ -19,7 +24,8 @@ class CortProcessor:
         crop = self.parse_config()
         if isinstance(crop, list):
             self.crop_list = crop
-
+        
+        self.data={}
         self.data['rates'] = 'run_process_first'
         self.data['coords'] = 'run_process_first'
         self.data['angles'] = 'run_process_first'
@@ -85,6 +91,9 @@ class CortProcessor:
         kin_data_list = self.kin_data
 
         self.data = {}
+
+        self.data['bodyparts'] = kin_data_list[0]['bodyparts']
+        self.data['angle_names'] = kin_data_list[0]['angles_list']
         
         self.data['rates']=[]
         self.data['coords']=[]
@@ -214,12 +223,12 @@ class CortProcessor:
             formatted_angles.append(f_angle)
 
 
-        if len(rates)==1: #check if just single array in list
+        if len(formatted_rates)==1: #check if just single array in list
             rates = np.array(formatted_rates)
         else: #if multiple, stitch into single array
             rates = np.vstack(formatted_rates)
 
-        if len(formatted_angles==1): #check if single array
+        if len(formatted_angles)==1: #check if single array
             kin = np.array(formatted_angles)
         elif formatted_angles[0].ndim > 1: #check if multiple angles
             kin = np.vstack(formatted_angles)
@@ -415,7 +424,8 @@ class CortProcessor:
             print(e)
             print('make sure you run divide into gaits first')
 
-    def convert_to_phase(self, Y, gait_indices = None):
+    def convert_to_phase(self, gait_indices = None):
+        #TODO
         phase_list = []
         
         if gait_indices is None:
@@ -430,6 +440,7 @@ class CortProcessor:
         return phase_list #use np.hstack on output to get continuous
 
     def with_PCA(self, dims):
+        #TODO
         temp_rates, nada = self.stitch_data(self.rate_list, self.angle_list)
         nada, pca_output = apply_PCA(temp_rates.T, dims)
         
