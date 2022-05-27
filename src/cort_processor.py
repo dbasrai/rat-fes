@@ -270,6 +270,10 @@ class CortProcessor:
             print('did you run process_toe_height() yet?????')
 
     def get_gait_indices(self, Y=None):
+        '''
+        #TODO
+        TODO
+        '''
         limbfoot_angles = []
         if Y is None:
             for angles in self.data['angles']:
