@@ -234,7 +234,7 @@ class CortProcessor:
             kin = np.vstack(formatted_angles)
         else:
             kin = np.hstack(formatted_angles)
-        return rates, kin
+        return np.squeeze(rates), np.squeeze(kin)
 
     def stitch_data(self, firing_rates_list, resampled_angles_list):
         rates = np.vstack(firing_rates_list)
@@ -355,7 +355,7 @@ class CortProcessor:
         return X_gait, Y_gait #return list of list of lists lol
 
     def remove_bad_gaits(self, X=None, Y=None, gait_indices=None,
-            avg_gait_samples = None):
+            avg_gait_samples = None, bool_resample=True):
         if gait_indices is None:
             gait_indices = self.gait_indices
         
@@ -394,8 +394,8 @@ class CortProcessor:
         proc_rates = []
         proc_angles = []
         for i, trial_indices in enumerate(gait_indices):
-            temp_rates = []
-            temp_angles = []
+            trial_rate_gait = []
+            trial_angle_gait = []
             for j in range(np.size(trial_indices)-1):
                 if j in bads_list[i]:
                     continue
@@ -403,13 +403,18 @@ class CortProcessor:
                     end = trial_indices[j+1]
                     start = trial_indices[j]
 
-                    temp_rates.append(rates[i][start:end,:])
-                    temp_angles.append(angles[i][start:end,:])
+                    temp_rate = rates[i][start:end,:]
+                    temp_angle = angles[i][start:end,:]
+                    if bool_resample:
+                        temp_rate = resample(temp_rate, avg_gait_samples, axis=0)
+                        temp_angle = resample(temp_angle, avg_gait_samples, axis=0)
+                    trial_rate_gait.append(temp_rate)
+                    trial_angle_gait.append(temp_angle)
+ 
+            proc_rates.append(trial_rate_gait)
+            proc_angles.append(trial_angle_gait)
 
-            proc_rates.append(np.vstack(temp_rates))
-            proc_angles.append(np.vstack(temp_angles))
-
-        return proc_rates, proc_angles
+        return np.vstack(proc_rates), np.vstack(proc_angles)
                 
  
 

@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 from  matplotlib.colors import LinearSegmentedColormap
 import numpy as np
 from src.wiener_filter import *
+from matplotlib.pyplot import cm
 
 def plot_raster(df):
     fig=plt.figure()
@@ -11,16 +12,44 @@ def plot_raster(df):
             colLabels = df.columns, cellLoc='center', loc = 'upper left')
     
 
-def plot_gait_state_space(array):
+def plot_gait_state_space_3D(list_of_array, subsample=5):
+    #should be in gaits x gait samples x pca_dimensions
+    #ONLY 2D FOR NOW
+    #this is a little hard to explaijection='3d')
     fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
-    #for gait in array:
-    #    ax.plot3D(gait[0,:], gait[1,:], gait[2,:], color='lightsteelblue')
-    avg = np.average(array, axis=0)
-    avg = np.vstack((avg.T, avg[:,0].T)).T
-    ax.plot3D(avg[0,:], avg[1,:], avg[2,:], color='blue')
-    ax.scatter(avg[0,:], avg[1,:], avg[2,:], color='blue')
+    ax = fig.add_subplot(111)
+
+    average_gait = np.average(array, axis=0)
+    random_sampling = np.random.randint(0, array.shape[0], subsample)
+    gait_sampling = np.vstack(array[random_sampling,:,:])
+
+    ax.scatter3D(average_gait[:,0], average_gait[:,1], average_gait[:,2], color='blue')
+    ax.plot(average_gait[:,0], average_gait[:,1], average_gait[:,2], color='blue')
+
+    ax.plot(gait_sampling[:,0], gait_sampling[:,1], gait_sampling[:,2], alpha=0.2, color='blue')
  
+    return fig, ax
+
+def plot_gait_state_space_2D(list_of_array, subsample=5):
+    #should be in gaits x gait samples x pca_dimensions
+    #ONLY 2D FOR NOW
+    #this is a little hard to explain
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    color = iter(cm.rainbow(np.linspace(0, 1, len(list_of_array))))
+    for array in list_of_array:
+        c_current = next(color)
+        average_gait = np.average(array, axis=0)
+        random_sampling = np.random.randint(0, array.shape[0], subsample)
+        gait_sampling = np.vstack(array[random_sampling,:,:])
+
+        ax.scatter(average_gait[:,0], average_gait[:,1], color=c_current)
+        ax.plot(average_gait[:,0], average_gait[:,1], color=c_current)
+
+        ax.plot(gait_sampling[:,0], gait_sampling[:,1], alpha=0.2, color=c_current)
+         
+
 def plot_wiener_filter_predic(test_x, test_y, h):
     predic_y = test_wiener_filter(test_x, h)
     vaffy = vaf(test_y, predic_y)
