@@ -6,7 +6,7 @@ folder_handler.py contains code for FolderHandler object. this looks through dat
 
 cort_processor.py contains code for CortHandler object. this extracts data using paths giving to it by FolderHandler object, and then contains a variety of functions for manipulating data containing neural + kinematic data.
 
-see cort_processor_description.md in docs for full info
+see cort_processor_doc.md in docs for full info
 
 MODULES:
 

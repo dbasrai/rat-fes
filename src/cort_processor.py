@@ -17,6 +17,7 @@ class CortProcessor:
     see cort_processor.md in 'docs' for more information
     '''
     def __init__(self, folder_path):
+        #see docs/data_folder_layout.md for how to structure folder_path
         self.handler = FolderHandler(folder_path)
         self.tdt_data, self.kin_data = self.extract_data()
         
@@ -36,6 +37,9 @@ class CortProcessor:
         self.avg_gait_samples = 'run get_gait_indices first'
 
     def parse_config(self):
+        '''
+        this loads config.yaml file
+        '''
         try:
             path = self.handler.folder_path
             with open(f"{path}/config.yaml", "r") as stream:
@@ -51,6 +55,15 @@ class CortProcessor:
             print(exc)
 
     def extract_data(self):
+        '''
+        this is called when a CortProcessor is initialized.
+        It extracts raw neuiral,raw angles, and raw coords
+        neural data is saved under CortProcessr.tdt_data
+        kinematic data is saved under CortProcessor.kin_data
+
+        If you use process cort script, all these attriibutes are overwritten
+        since raw data isnt saved after processing.
+        '''
         tdt_data_list = []
         raw_ts_list = self.handler.ts_list
         raw_tdt_list = self.handler.tdt_list
@@ -165,6 +178,11 @@ class CortProcessor:
             print(e)
 
     def crop_data(self, tdt_data, kin_data, crop):
+        '''
+        helper function that both syncs and crops neural/kinematic data
+        see docs/cam_something.odg for how it syncs em.
+        '''
+
         crop_tdt_datafile=tdt_data
         crop_kin_datafile=kin_data
 
@@ -237,6 +255,9 @@ class CortProcessor:
         return np.squeeze(rates), np.squeeze(kin)
 
     def stitch_data(self, firing_rates_list, resampled_angles_list):
+        '''
+        deprecated. you can just use np.vstack instead of this
+        '''
         rates = np.vstack(firing_rates_list)
         kin = np.vstack(resampled_angles_list)
 
@@ -246,6 +267,10 @@ class CortProcessor:
         """
         takes list of rates, angles, then using a wiener filter to decode. 
         if no parameters are passed, uses data['rates'] and data['angles']
+
+        returns best_h, vaf (array of all angles and all folds), test_x (the
+        x test set that had best performance, and test_y (the y test set that
+        had best formance)
         """
         try:
             if X is None and Y is None:
@@ -261,6 +286,11 @@ class CortProcessor:
             print('did you run process() first.')
 
     def decode_toe_height(self):
+        '''
+        a PIPELINE code, which you can you only after you run
+        process_toe_height. You cannot pass any custom parameters in this. it
+        uses a wiener filter to create a decoder just for toe height
+        '''
         try: 
             X,Y = self.stitch_and_format(self.data['rates'],
                     self.data['toe_height'])
@@ -271,8 +301,16 @@ class CortProcessor:
 
     def get_gait_indices(self, Y=None):
         '''
-        #TODO
-        TODO
+        This takes a kinematic variable, and returns indices where each peak is
+        found. It also returns the average number of samples between each
+        peaks. 
+
+        If passing in without parameter, it uses the 3rd angle measurement,
+        which is usually the limbfoot angle. 
+
+        This is mainly used as a starter method for other method.
+        Divide_into_gaits for instance takes in these indices, and divides both
+        the kinematics and rates into gait cycles.
         '''
         limbfoot_angles = []
         if Y is None:
@@ -306,6 +344,18 @@ class CortProcessor:
     def divide_into_gaits(self, X=None, Y=None, gait_indices=None,
             avg_gait_samples=None,
             bool_resample=True):
+        '''
+        this takes in X, which is usually rates, Y which is usually some
+        kinematic variable, and indices, which tell you how to divide up the
+        data, and divides all the data up as lists. Since the originall X is
+        already a list, it returns a list of list of lists. Confusing?
+        
+        if you don't pass any parameters, then get_gait_indices must be run
+        first. This finds gait_indices/avg_gait_samples using limbfoot angle.
+
+        If you don't pass in X/Y paramters, it by default uses rates and
+        angles, and then divides em up.
+        '''
        
         if gait_indices is None:
             gait_indices = self.gait_indices
@@ -356,6 +406,11 @@ class CortProcessor:
 
     def remove_bad_gaits(self, X=None, Y=None, gait_indices=None,
             avg_gait_samples = None, bool_resample=True):
+        '''
+        similar to divide into gaits, but instead of just dividing, it also
+        removes any gait cycles that have a much smaller or much larger amount
+        of samples. in a sense it divies up gaits and removes bad ones.
+        '''
         if gait_indices is None:
             gait_indices = self.gait_indices
         
@@ -419,6 +474,12 @@ class CortProcessor:
  
 
     def neuron_tuning(self, rates_gait=None):
+        '''
+        this takes in neural data that is divided into gaits, and sorts each
+        channel by where in the gait cycle each channel is most active
+
+        feed the output of this into plot_raster!
+        '''
         try:
             if rates_gait is None:
                 rates_gait = self.rates_gait
@@ -434,6 +495,9 @@ class CortProcessor:
             print('make sure you run divide into gaits first')
 
     def convert_to_phase(self, gait_indices = None):
+        '''
+        this is still TODO. might already work, but double check this
+        '''
         #TODO
         phase_list = []
         
@@ -449,6 +513,9 @@ class CortProcessor:
         return phase_list #use np.hstack on output to get continuous
 
     def with_PCA(self, dims):
+        '''
+        this is todo, probably doesn't work.
+        '''
         #TODO
         temp_rates, nada = self.stitch_data(self.rate_list, self.angle_list)
         nada, pca_output = apply_PCA(temp_rates.T, dims)
