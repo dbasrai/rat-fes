@@ -20,7 +20,6 @@ def decode_kfolds(X, Y, k=10, metric =3):
 
         train_x, test_x = X[train_index, :], X[test_index,:]
         train_y, test_y = Y[train_index, :], Y[test_index, :]
-
         h=train_wiener_filter(train_x, train_y)
         predic_y = test_wiener_filter(test_x, h)
         

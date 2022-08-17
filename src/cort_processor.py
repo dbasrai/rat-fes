@@ -9,6 +9,7 @@ from src.tdt_support import *
 from src.decoders import *
 
 from scipy.signal import resample, find_peaks
+import scipy.io as sio
 
 class CortProcessor:
     '''
@@ -17,24 +18,42 @@ class CortProcessor:
     see cort_processor.md in 'docs' for more information
     '''
     def __init__(self, folder_path):
-        #see docs/data_folder_layout.md for how to structure folder_path
-        self.handler = FolderHandler(folder_path)
-        self.tdt_data, self.kin_data = self.extract_data()
-        
-        self.crop_list = None
-        crop = self.parse_config()
-        if isinstance(crop, list):
-            self.crop_list = crop
-        
-        self.data={}
-        self.data['rates'] = 'run_process_first'
-        self.data['coords'] = 'run_process_first'
-        self.data['angles'] = 'run_process_first'
-        self.data['toe_height'] = 'run process first, then run process\
-                toehight'
+        if os.path.isdir(folder_path):
+            #see docs/data_folder_layout.md for how to structure folder_path
+            self.handler = FolderHandler(folder_path)
+            self.tdt_data, self.kin_data = self.extract_data()
+            
+            self.crop_list = None
+            crop = self.parse_config()
+            if isinstance(crop, list):
+                self.crop_list = crop
+            
+            self.data={}
+            self.data['rates'] = 'run_process_first'
+            self.data['coords'] = 'run_process_first'
+            self.data['angles'] = 'run_process_first'
+            self.data['toe_height'] = 'run process first, then run process\
+                    toehight'
 
-        self.gait_indices = 'run get_gait_indices first'
-        self.avg_gait_samples = 'run get_gait_indices first'
+            self.gait_indices = 'run get_gait_indices first'
+            self.avg_gait_samples = 'run get_gait_indices first'
+
+        else:
+            print('this is filipe data i belive')
+            self.handler = sio.loadmat(folder_path)
+            self.extract_filipe()
+
+    def extract_filipe(self):
+        self.data={}
+        #absolutely terrible code to remove 0 rate channels, which
+        #throws an error in wiener filter
+        temp_rates = self.handler['SelectedSpikeData'].T
+        temp_rates_remove = temp_rates[~np.all(temp_rates == 0, axis=1)]
+        self.data['rates'] = [temp_rates_remove.T]
+
+        self.data['coords'] = [self.handler['SelectedKinematicData']['kindata'][0,0]]
+        angles_temp = self.handler['SelectedKinematicData']['kinmeasures'][0,0][0,0]
+        self.data['angles'] = [np.squeeze(np.array(angles_temp.tolist())).T]
 
     def parse_config(self):
         '''
