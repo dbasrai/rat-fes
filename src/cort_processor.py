@@ -54,6 +54,8 @@ class CortProcessor:
         self.data['coords'] = [self.handler['SelectedKinematicData']['kindata'][0,0]]
         angles_temp = self.handler['SelectedKinematicData']['kinmeasures'][0,0][0,0]
         self.data['angles'] = [np.squeeze(np.array(angles_temp.tolist())).T]
+        angle_names = ['ankle', 'limbfoot', 'hip', 'knee', 'toeheight']
+        self.data['angle_names'] = angle_names
 
     def parse_config(self):
         '''
@@ -318,7 +320,7 @@ class CortProcessor:
         except:
             print('did you run process_toe_height() yet?????')
 
-    def get_gait_indices(self, Y=None):
+    def get_gait_indices(self, Y=None, angle_number=3):
         '''
         This takes a kinematic variable, and returns indices where each peak is
         found. It also returns the average number of samples between each
@@ -334,7 +336,7 @@ class CortProcessor:
         limbfoot_angles = []
         if Y is None:
             for angles in self.data['angles']:
-                limbfoot_angles.append(angles[:,3])
+                limbfoot_angles.append(angles[:,angle_number])
         else:
             assert isinstance(Y, list), 'Y must be a list'
             limbfoot_angles = Y
