@@ -409,7 +409,7 @@ class CortProcessor:
         '''
         similar to divide into gaits, but instead of just dividing, it also
         removes any gait cycles that have a much smaller or much larger amount
-        of samples. in a sense it divies up gaits and removes bad ones.
+        of samples. in a sense it divies up gaits and removes bad ones.0
         '''
         if gait_indices is None:
             gait_indices = self.gait_indices
