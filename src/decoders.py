@@ -7,22 +7,24 @@ from sklearn.pipeline import make_pipeline
 from sklearn.metrics import accuracy_score
 from sklearn.decomposition import PCA
 
-def decode_kfolds(X, Y, k=10, metric =3):
+def decode_kfolds(X, Y, k=10, metric =3, preset_h=None):
     kf = KFold(n_splits=k)
 
     h_list = []
 
     vaf_array = np.zeros((Y.shape[1], k))
     index=0
-    best_vaf=-1
+    best_vaf=-10000000
     for train_index, test_index in kf.split(X):
 
 
         train_x, test_x = X[train_index, :], X[test_index,:]
         train_y, test_y = Y[train_index, :], Y[test_index, :]
-        h=train_wiener_filter(train_x, train_y)
+        if preset_h is None:
+            h=train_wiener_filter(train_x, train_y)
+        else:
+            h=preset_h
         predic_y = test_wiener_filter(test_x, h)
-        
         for j in range(predic_y.shape[1]):
             vaf_array[j, index] = vaf(test_y[:,j], predic_y[:,j])
             
