@@ -24,6 +24,7 @@ class CCAProcessor:
         self.data['cp1']['proc_x'], self.data['cp1']['proc_y'],\
         self.data['cp2']['proc_x'], self.data['cp2']['proc_y'] =\
         self.process_and_align_kinematics()
+
         
         self.data['cp1']['h'], self.data['cp1']['proc_vaf'], nada, nada =\
         self.cp1.decode_angles(X=[self.data['cp1']['proc_x']],\
@@ -134,3 +135,14 @@ class CCAProcessor:
         return cp1_gait_x, cp1_gait_y, cp2_gait_x, cp2_gait_y 
 
 
+    def back_to_gait(self, x, y=None, avg_gait_samples=None):
+        if avg_gait_samples is None:
+            avg_gait_samples = self.cp1.avg_gait_samples
+        x_return = np.reshape(x, (int(x.shape[0]/avg_gait_samples), 
+            avg_gait_samples, x.shape[1]), 'C')
+        if y is not None:
+            y_return = np.reshape(y, (int(y.shape[0]/avg_gait_samples), 
+                avg_gait_samples, y.shape[1]), 'C')
+            return x_return, y_return
+
+        return x_return

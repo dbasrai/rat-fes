@@ -45,11 +45,12 @@ class CortProcessor:
 
     def extract_filipe(self):
         self.data={}
-        #absolutely terrible code to remove 0 rate channels, which
+        #remoivng 0 rate channels, which
         #throws an error in wiener filter
-        temp_rates = self.handler['SelectedSpikeData'].T
-        temp_rates_remove = temp_rates[~np.all(temp_rates == 0, axis=1)]
-        self.data['rates'] = [temp_rates_remove.T]
+        temp_rates = self.handler['SelectedSpikeData']
+        mask = np.average(temp_rates, 0) > .1
+        temp_rates_remove = temp_rates[:, mask]
+        self.data['rates'] = [temp_rates_remove]
 
         self.data['coords'] = [self.handler['SelectedKinematicData']['kindata'][0,0]]
         angles_temp = self.handler['SelectedKinematicData']['kinmeasures'][0,0][0,0]
