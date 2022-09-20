@@ -99,7 +99,6 @@ def plot_all(list_of_arrays, labels=None, subsample=5):
     ax = fig.add_subplot()
     random_sampling = np.random.randint(0, list_of_arrays[0].shape[0],
             subsample)
-
     color = iter(cm.rainbow(np.linspace(0, 1, len(list_of_arrays))))
     for idx, array in enumerate(list_of_arrays):
 
@@ -110,8 +109,8 @@ def plot_all(list_of_arrays, labels=None, subsample=5):
         ax.plot(avg[:,0], avg[:,1], label=labels[idx], color=c_current)
         ax.scatter(avg[:,0], avg[:,1], color=c_current)
         if subsample>1:
-            ax.plot(gait_sample[:,0], gait_sample[:,1], alpha=0.2, label =
-                labels[idx], color=c_current)
+            ax.plot(gait_sample[:,0], gait_sample[:,1], alpha=0.2,
+            color=c_current)
 
 
 
