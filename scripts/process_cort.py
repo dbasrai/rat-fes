@@ -5,6 +5,7 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description='pass in folder')
     parser.add_argument('echo')
+    parser.add_argument('thresh', type=float)
     return parser.parse_args()
 
 def main():
@@ -20,7 +21,7 @@ def main():
     else:
         print(pickles_dir, "folder already exists.")
     session = CortProcessor(args.echo)
-    session.process()
+    session.process(threshold_multiplier = args.thresh)
     animal_name = session.handler.folder_path.split('/')[-2]
     session_name = session.handler.folder_path.split('/')[-1]
     # You should change 'test' to your preferred folder.
