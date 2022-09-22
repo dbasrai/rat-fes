@@ -6,7 +6,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.metrics import accuracy_score
 from sklearn.decomposition import PCA
-
+from sklearn.linear_model import Ridge
 def decode_kfolds(X, Y, k=10, metric =3, preset_h=None):
     kf = KFold(n_splits=k)
 
@@ -68,3 +68,22 @@ def apply_PCA(X, dims):
 
     return X_pca_output, pca_output
 
+
+def regression_fit(b0, x, y, my_alpha=1.0):
+    #b0 = day0 decoder weights
+    #x = dayk x values (usually PCA)
+    #y = dayk y values
+
+    x_format, y_format = format_data(x, y)
+    xb0 = test_wiener_filter(x_format, b0)
+    y_star = y_format-xb0
+    x_plus_bias = np.c_[np.ones((np.size(x_format, 0), 1)), x_format]
+    
+    clf = Ridge(alpha=my_alpha)
+    clf.fit(x_plus_bias, y_star)
+
+    Wpost = clf.coef_.T
+
+    b = Wpost + b0
+
+    return b

@@ -57,7 +57,13 @@ class CCAProcessor:
             output = 'kinematics are different'
             return output
 
-    def PCA_to_same_dimensions(self, preset_num_components = None):
+    def apply_PCA(self, cp1_x=None, cp2_x=None, preset_num_components = None):
+
+        if cp1_x is None:
+            cp1_x = self.data['cp1']['proc_x']
+        if cp2_x is None:
+            cp2_x = self.data['cp2']['proc_x']
+
         if preset_num_components is None:
             pca_cp1 = PCA(n_components=.95)
             cp1_pca = pca_cp1.fit_transform(self.data['cp1']['proc_x'])
@@ -75,13 +81,13 @@ class CCAProcessor:
         pca_cp1 = PCA(n_components = num_components)
         pca_cp2 = PCA(n_components = num_components)
 
-        self.data['cp1']['pca_x'] = pca_cp1.fit_transform(self.data['cp1']['proc_x'])
-        self.data['cp2']['pca_x'] = pca_cp2.fit_transform(self.data['cp2']['proc_x'])
+        self.data['cp1']['pca_x'] = pca_cp1.fit_transform(cp1_x)
+        self.data['cp2']['pca_x'] = pca_cp2.fit_transform(cp2_x)
 
         return num_components, self.data['cp1']['pca_x'],\
                 self.data['cp2']['pca_x']
 
-    def CCA_cp2(self, cp1_x, cp2_x, preset_num_components=None):
+    def CCA_cp2(self, cp1_x=None, cp2_x=None, preset_num_components=None):
         if preset_num_components is None:
             try:
                 num_components = self.num_components
@@ -90,6 +96,10 @@ class CCAProcessor:
         else:
             num_components = preset_num_components
 
+        if cp1_x is None:
+            cp1_x = self.data['cp1']['pca_x']
+        if cp2_x is None:
+            cp2_x = self.data['cp2']['pca_x']
         cca_cp1cp2 = CCA(n_components = num_components, scale=False)
         x1_cca, x2_cca=cca_cp1cp2.fit_transform(cp1_x, cp2_x)
 
@@ -109,6 +119,7 @@ class CCAProcessor:
         cp1_gait_x, cp1_gait_y = self.cp1.remove_bad_gaits()
         cp2_gait_x, cp2_gait_y = self.cp2.remove_bad_gaits(avg_gait_samples =
                 avg_samples)
+
         
         if len(cp1_gait_x) >= len(cp2_gait_x):
             end_slice = len(cp2_gait_x)
@@ -146,3 +157,39 @@ class CCAProcessor:
             return x_return, y_return
 
         return x_return
+
+    def subsample(self, percent, cp1_x=None, cp1_y=None, cp2_x=None,
+            cp2_y=None):
+        #perhaps i am writing somethign that is 3 lines of code in 576 lines
+        #but do i care?
+
+
+        avg_gait_samples = self.cp1.avg_gait_samples
+
+        if cp1_x is None:
+            cp1_x = self.data['cp1']['proc_x']
+        if cp1_y is None:
+            cp1_y = self.data['cp1']['proc_y']
+        if cp2_x is None:
+            cp2_x = self.data['cp2']['proc_x']
+        if cp2_y is None:
+            cp2_y = self.data['cp2']['proc_y']
+
+        if percent==1.0:
+            return cp1_x, cp1_y, cp2_x, cp2_y
+        temp_x1, temp_y1 = self.back_to_gait(x=cp1_x, y=cp1_y)
+        temp_x2, temp_y2 = self.back_to_gait(x=cp2_x, y=cp2_y)
+
+        subsize = int(percent * temp_x1.shape[0])
+        temp = np.random.choice(temp_x1.shape[0], size=subsize, replace=False)
+        temp.sort()
+
+        my_list = [temp_x1, temp_y1, temp_x2, temp_y2]
+        new_array = []
+        for array in my_list:
+            temp_array = array[temp]
+            total_samples = temp_array.shape[0] * temp_array.shape[1]
+            new_array.append(np.reshape(temp_array, (total_samples,
+                temp_array.shape[2])))
+ 
+        return new_array[0], new_array[1], new_array[2], new_array[3]

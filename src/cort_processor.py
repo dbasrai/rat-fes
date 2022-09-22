@@ -9,6 +9,7 @@ from src.tdt_support import *
 from src.decoders import *
 
 from scipy.signal import resample, find_peaks
+from sklearn.decomposition import PCA
 import scipy.io as sio
 
 class CortProcessor:
@@ -285,6 +286,33 @@ class CortProcessor:
 
         return rates, kin
 
+
+    def subsample(self, percent, X=None, Y=None):
+        '''
+        function to subsample RAW data (not gait aligned). 
+        '''
+        if X is None:
+            X = self.data['rates']
+        if Y is None:
+            Y = self.data['angles']
+
+        if percent==1.0:
+            return X, Y
+
+        new_x=[]
+        new_y=[]
+
+        for i in range(len(X)):
+            subsize = int(percent * X[i].shape[0])
+            temp = np.random.choice(X[i].shape[0], size=subsize, replace=False)
+            temp.sort()
+
+            new_x.append(X[i][temp])
+            new_y.append(Y[i][temp])
+
+        return new_x, new_y
+        
+
     def decode_angles(self, X=None, Y=None):
         """
         takes list of rates, angles, then using a wiener filter to decode. 
@@ -295,12 +323,13 @@ class CortProcessor:
         had best formance)
         """
         try:
-            if X is None and Y is None:
-                X, Y = self.stitch_and_format(self.data['rates'], 
-                        self.data['angles'])
+            if X is None:
+                X = self.data['rates']
+            if Y is None:
+                Y = self.data['angles']
 
-            else:
-                X, Y = self.stitch_and_format(X, Y)
+            X, Y = self.stitch_and_format(X,Y)
+
             h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y)
             
    
@@ -536,19 +565,22 @@ class CortProcessor:
         
         return phase_list #use np.hstack on output to get continuous
 
-    def with_PCA(self, dims):
+    def apply_PCA(self, dims=None, X=None):
         '''
         this is todo, probably doesn't work.
         '''
-        #TODO
-        temp_rates, nada = self.stitch_data(self.rate_list, self.angle_list)
-        nada, pca_output = apply_PCA(temp_rates.T, dims)
-        
-        self.PCA_rate_list = []
+        if X is None:
+            X=self.data['rates']
+        if dims is None:
+            dims=.95
+        X_full = np.vstack(X)
+        pca_object = PCA(n_components = dims)
+        pca_object.fit(X_full)
 
-        for rate in self.rate_list:
-            temp_output = pca_output.transform(rate.T)
-            self.PCA_rate_list.append(temp_output.T)
+        x_pca = []
 
-        return self.PCA_rate_list, pca_output
+        for X_recording in X:
+            x_pca.append(pca_object.transform(X_recording))
+
+        return x_pca
 
