@@ -87,7 +87,7 @@ class CCAProcessor:
         return num_components, self.data['cp1']['pca_x'],\
                 self.data['cp2']['pca_x']
 
-    def CCA_cp2(self, cp1_x=None, cp2_x=None, preset_num_components=None):
+    def apply_CCA(self, cp1_x=None, cp2_x=None, preset_num_components=None):
         if preset_num_components is None:
             try:
                 num_components = self.num_components
@@ -100,6 +100,7 @@ class CCAProcessor:
             cp1_x = self.data['cp1']['pca_x']
         if cp2_x is None:
             cp2_x = self.data['cp2']['pca_x']
+
         cca_cp1cp2 = CCA(n_components = num_components, scale=False)
         x1_cca, x2_cca=cca_cp1cp2.fit_transform(cp1_x, cp2_x)
 
@@ -109,7 +110,7 @@ class CCAProcessor:
 
         x2_into_x1 = cca_cp1cp2.inverse_transform(x2_cca)
 
-        return x2_into_x1
+        return cca_cp1cp2, x2_into_x1
 
     def process_and_align_kinematics(self):
 
