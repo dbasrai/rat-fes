@@ -82,8 +82,8 @@ def regression_fit(b0, x, y, my_alpha=1.0):
     clf = Ridge(alpha=my_alpha)
     clf.fit(x_plus_bias, y_star)
 
-    Wpost = clf.coef_.T
+    b = clf.coef_.T
 
-    b = Wpost + b0
+    wpost = b + b0
 
-    return b
+    return wpost
