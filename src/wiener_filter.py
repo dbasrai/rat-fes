@@ -18,7 +18,7 @@ def flatten_list(X):
         Y = np.vstack((Y, each))
     return Y
 
-def vaf(x,xhat):
+def vaf(x,xhat, round_values=True):
     """
     Calculating vaf value
     x: actual values, a numpy array
@@ -26,7 +26,11 @@ def vaf(x,xhat):
     """
     x = x - x.mean(axis=0)
     xhat = xhat - xhat.mean(axis=0)
-    return (1-(np.sum(np.square(x - xhat))/np.sum(np.square(x))))
+    if round_values is True:
+        return np.round((1-(np.sum(np.square(x -
+            xhat))/np.sum(np.square(x)))),2)
+    else:
+        return (1-(np.sum(np.square(x - xhat))/np.sum(np.square(x))))
 
 def format_data(x, y, N=10):
     spike_N_lag = []
