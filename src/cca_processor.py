@@ -11,10 +11,10 @@ from sklearn.preprocessing import StandardScaler
 class CCAProcessor:
     def __init__(self, cp1, cp2, limbfoot_angle=1):
         self.cp1 = cp1
-        self.cp1.get_gait_indices()
+        self.cp1.get_gait_indices(angle_number=1)
         
         self.cp2 = cp2
-        self.cp2.get_gait_indices()
+        self.cp2.get_gait_indices(angle_number=1)
         self.limbfoot_angle=limbfoot_angle
         
         self.data = {}
@@ -178,19 +178,12 @@ class CCAProcessor:
 
         if percent==1.0:
             return cp1_x, cp1_y, cp2_x, cp2_y
-        temp_x1, temp_y1 = self.back_to_gait(x=cp1_x, y=cp1_y)
-        temp_x2, temp_y2 = self.back_to_gait(x=cp2_x, y=cp2_y)
 
-        subsize = int(percent * temp_x1.shape[0])
-        temp = np.random.choice(temp_x1.shape[0], size=subsize, replace=False)
-        temp.sort()
+        subsize = int(percent * cp1_x.shape[0])
 
-        my_list = [temp_x1, temp_y1, temp_x2, temp_y2]
+        my_list = [cp1_x, cp1_y, cp2_x, cp2_y]
         new_array = []
         for array in my_list:
-            temp_array = array[temp]
-            total_samples = temp_array.shape[0] * temp_array.shape[1]
-            new_array.append(np.reshape(temp_array, (total_samples,
-                temp_array.shape[2])))
+            new_array.append(array[:subsize, :])
  
         return new_array[0], new_array[1], new_array[2], new_array[3]

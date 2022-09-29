@@ -290,6 +290,7 @@ class CortProcessor:
     def subsample(self, percent, X=None, Y=None):
         '''
         function to subsample RAW data (not gait aligned). 
+        we keep it in order since we go by folds.
         '''
         if X is None:
             X = self.data['rates']
@@ -303,12 +304,9 @@ class CortProcessor:
         new_y=[]
 
         for i in range(len(X)):
-            subsize = int(percent * X[i].shape[0])
-            temp = np.random.choice(X[i].shape[0], size=subsize, replace=False)
-            temp.sort()
-
-            new_x.append(X[i][temp])
-            new_y.append(Y[i][temp])
+            subsample = int(np.round(percent * X[i].shape[0]))
+            new_x.append(X[i][:subsample,:])
+            new_y.append(Y[i][:subsample,:])
 
         return new_x, new_y
         
@@ -376,8 +374,19 @@ class CortProcessor:
         gait_indices = []
         samples_list = []
         for angle in limbfoot_angles:
-            peaks, nada = find_peaks(angle, prominence=10)
-            peaks = np.append(peaks, np.size(angle))
+
+            temp_peaks, nada = find_peaks(angle, prominence=10)
+            avg_ = np.average(angle[temp_peaks])
+            std_ = np.std(angle[temp_peaks])
+
+
+            temp2_peaks = temp_peaks[np.argwhere(angle[temp_peaks] < avg_ +
+                30)]
+            temp2_peaks = np.squeeze(temp2_peaks)
+            peaks = temp2_peaks[np.argwhere(angle[temp2_peaks] > avg_ -
+                30)]
+            peaks = np.squeeze(peaks)
+            peaks = np.append(peaks, np.size(angle)-1)
             peaks = np.insert(peaks, 0, 0)
             gait_indices.append(peaks)
             samples_list.append(np.diff(peaks))
@@ -469,19 +478,7 @@ class CortProcessor:
         
         if avg_gait_samples is None:
             avg_gait_samples = self.avg_gait_samples
-        
-        
-        above = 1.33 * avg_gait_samples
-        below = .66 * avg_gait_samples
-        bads_list = []
-        for idx in gait_indices:
-
-            bad_above = np.argwhere(np.diff(idx)>above)
-            bad_below = np.argwhere(np.diff(idx)<below)
-
-            bads_list.append(np.squeeze(np.concatenate((bad_above,
-                bad_below))).tolist())
-
+ 
         if X is None:
             rates = self.data['rates']
         elif isinstance(X, list):
@@ -499,6 +496,84 @@ class CortProcessor:
             print('Y must be list')
             return
 
+       
+        
+        above = 1.33 * avg_gait_samples
+        below = .66 * avg_gait_samples
+        bads_list = []
+        for idx in gait_indices:
+
+            bad_above = np.argwhere(np.diff(idx)>above)
+            bad_below = np.argwhere(np.diff(idx)<below)
+
+            bads_list.append(np.squeeze(np.concatenate((bad_above,
+                bad_below))).tolist())
+        proc_rates = []
+        proc_angles = []
+        for i, trial_indices in enumerate(gait_indices):
+            trial_rate_gait = []
+            trial_angle_gait = []
+            for j in range(np.size(trial_indices)-1):
+                if j in bads_list[i]:
+                    continue
+                else:
+                    end = trial_indices[j+1]
+                    start = trial_indices[j]
+
+                    temp_rate = rates[i][start:end,:]
+                    temp_angle = angles[i][start:end,:]
+                    if bool_resample:
+                        temp_rate = resample(temp_rate, avg_gait_samples, axis=0)
+                        temp_angle = resample(temp_angle, avg_gait_samples, axis=0)
+                    trial_rate_gait.append(temp_rate)
+                    trial_angle_gait.append(temp_angle)
+ 
+            proc_rates.append(trial_rate_gait)
+            proc_angles.append(trial_angle_gait)
+
+        return np.vstack(proc_rates), np.vstack(proc_angles)
+    def remove_bad_gaits(self, X=None, Y=None, gait_indices=None,
+            avg_gait_samples = None, bool_resample=True):
+        '''
+        similar to divide into gaits, but instead of just dividing, it also
+        removes any gait cycles that have a much smaller or much larger amount
+        of samples. in a sense it divies up gaits and removes bad ones.
+        '''
+        if gait_indices is None:
+            gait_indices = self.gait_indices
+        
+        if avg_gait_samples is None:
+            avg_gait_samples = self.avg_gait_samples
+ 
+        if X is None:
+            rates = self.data['rates']
+        elif isinstance(X, list):
+            rates = X
+        else: 
+            print('X must be list')
+            return
+
+
+        if Y is None:
+            angles = self.data['angles']
+        elif isinstance(Y, list):
+            angles = Y
+        else:
+            print('Y must be list')
+            return
+
+       
+        
+        above = 1.33 * avg_gait_samples
+        below = .66 * avg_gait_samples
+        bads_list = []
+        for idx in gait_indices:
+
+            bad_above = np.argwhere(np.diff(idx)>above)
+            bad_below = np.argwhere(np.diff(idx)<below)
+
+            bads_list.append(np.squeeze(np.concatenate((bad_above,
+                bad_below))).tolist())
         proc_rates = []
         proc_angles = []
         for i, trial_indices in enumerate(gait_indices):
