@@ -23,7 +23,7 @@ class CCAProcessor:
 
         self.data['cp1']['proc_x'], self.data['cp1']['proc_y'],\
         self.data['cp2']['proc_x'], self.data['cp2']['proc_y'] =\
-        self.process_and_align_kinematics()
+        self.sort_and_align()
 
         
         self.data['cp1']['h'], self.data['cp1']['proc_vaf'], nada, nada =\
@@ -84,10 +84,10 @@ class CCAProcessor:
         self.data['cp1']['pca_x'] = pca_cp1.fit_transform(cp1_x)
         self.data['cp2']['pca_x'] = pca_cp2.fit_transform(cp2_x)
 
-        return num_components, self.data['cp1']['pca_x'],\
-                self.data['cp2']['pca_x']
+        return self.data['cp1']['pca_x'], self.data['cp2']['pca_x']
 
-    def apply_CCA(self, cp1_x=None, cp2_x=None, preset_num_components=None):
+    def apply_CCA(self, cp1_x=None, cp2_x=None, preset_num_components=None,
+            transformer=None):
         if preset_num_components is None:
             try:
                 num_components = self.num_components
@@ -101,11 +101,14 @@ class CCAProcessor:
         if cp2_x is None:
             cp2_x = self.data['cp2']['pca_x']
 
-        cca_cp1cp2 = CCA(n_components = num_components, scale=False)
-        x1_cca, x2_cca=cca_cp1cp2.fit_transform(cp1_x, cp2_x)
+        if transformer is None:
+            cca_cp1cp2 = CCA(n_components = num_components, scale=False)
+            x1_cca, x2_cca=cca_cp1cp2.fit_transform(cp1_x, cp2_x)
+        else:
+            cca_cp1cp2 = transformer
+            nada, x2_cca = cca_cp1cp2.transform(cp2_x, cp2_x)
 
         self.cca = cca_cp1cp2
-        self.x1_cca = x1_cca
         self.x2_cca = x2_cca
 
         x2_into_x1 = cca_cp1cp2.inverse_transform(x2_cca)
@@ -146,6 +149,61 @@ class CCAProcessor:
         
         return cp1_gait_x, cp1_gait_y, cp2_gait_x, cp2_gait_y 
 
+    def sort_and_align(self, sample_variance =3):
+
+        print(self.check_same_kinematics())
+        
+        cp1_gait_x, cp1_gait_y =\
+        self.cp1.divide_into_gaits(bool_resample=False)
+
+        cp2_gait_x, cp2_gait_y =\
+        self.cp2.divide_into_gaits(bool_resample=False)
+
+        cp1_gait_x = cp1_gait_x[0]
+        cp1_gait_y = cp1_gait_y[0]
+        cp2_gait_x = cp2_gait_x[0]
+        cp2_gait_y = cp2_gait_y[0]
+        
+        cp1_avg_gaits = self.cp1.avg_gait_samples
+
+        cp1_x_sortdict={}
+        cp1_y_sortdict={}
+        cp2_x_sortdict={}
+        cp2_y_sortdict={}
+
+        var_range = range(cp1_avg_gaits-sample_variance,
+        cp1_avg_gaits+sample_variance+1)
+
+        for i in var_range:
+            cp1_x_sortdict[i]=[]
+            cp1_y_sortdict[i]=[]
+            cp2_x_sortdict[i]=[]
+            cp2_y_sortdict[i]=[]
+            for idx in range(len(cp1_gait_x)):
+                if len(cp1_gait_x[idx])==i:
+                    cp1_x_sortdict[i].append(cp1_gait_x[idx])
+                    cp1_y_sortdict[i].append(cp1_gait_y[idx])
+            for idx in range(len(cp2_gait_x)):
+                if len(cp2_gait_x[idx])==i:
+                    cp2_x_sortdict[i].append(cp2_gait_x[idx])
+                    cp2_y_sortdict[i].append(cp2_gait_y[idx])
+
+        cp1_final_x = []
+        cp1_final_y = []
+        cp2_final_x = []
+        cp2_final_y = []
+        for i in var_range:
+            num = min(len(cp1_x_sortdict[i]), len(cp2_x_sortdict[i]))
+
+            for j in range(num):
+                cp1_final_x.append(cp1_x_sortdict[i][j])
+                cp1_final_y.append(cp1_y_sortdict[i][j])
+                cp2_final_x.append(cp2_x_sortdict[i][j])
+                cp2_final_y.append(cp2_y_sortdict[i][j])
+
+        return np.concatenate(cp1_final_x), np.concatenate(cp1_final_y), np.concatenate(cp2_final_x), np.concatenate(cp2_final_y)
+
+        
 
     def back_to_gait(self, x, y=None, avg_gait_samples=None):
         if avg_gait_samples is None:

@@ -77,6 +77,10 @@ def ridge_fit(b0, x, y, my_alpha=1.0):
 
     x_format, y_format = format_data(x, y)
     xb0 = test_wiener_filter(x_format, b0)
+
+    initial_vaf = vaf(y_format[:,1], xb0[:,1])
+    print(f'initial_scoring is : {initial_vaf}')
+
     y_star = y_format-xb0
     x_plus_bias = np.c_[np.ones((np.size(x_format, 0), 1)), x_format]
     
@@ -87,6 +91,10 @@ def ridge_fit(b0, x, y, my_alpha=1.0):
 
     wpost = b + b0
 
+    ywpost = test_wiener_filter(x_format, wpost)
+    new_vaf = vaf(y_format[:,1], ywpost[:,1])
+    print(f'new_scoring is: {new_vaf}')
+
     return wpost
 
 def regression_fit(b0, x, y):
@@ -96,6 +104,10 @@ def regression_fit(b0, x, y):
 
     x_format, y_format = format_data(x, y)
     xb0 = test_wiener_filter(x_format, b0)
+
+    initial_vaf = vaf(y_format[:,1], xb0[:,1])
+    print(f'initial_scoring is : {initial_vaf}')
+
     y_star = y_format-xb0
     x_plus_bias = np.c_[np.ones((np.size(x_format, 0), 1)), x_format]
     
@@ -105,5 +117,9 @@ def regression_fit(b0, x, y):
     b = clf.coef_.T
 
     wpost = b + b0
+    ywpost = test_wiener_filter(x_format, wpost)
+    new_vaf = vaf(y_format[:,1], ywpost[:,1])
+
+    print(f'new_scoring is: {new_vaf}')
 
     return wpost

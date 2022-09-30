@@ -456,8 +456,12 @@ class CortProcessor:
                 
                 trial_rate_gait.append(temp_rate)
                 trial_angle_gait.append(temp_angle)
-            X_gait.append(np.array(trial_rate_gait))
-            Y_gait.append(np.array(trial_angle_gait))
+            X_gait.append(trial_rate_gait)
+            Y_gait.append(trial_angle_gait)
+        
+        if bool_resample:
+            X_gait = np.array(X_gait)
+            Y_gait = np.array(Y_gait)
 
         if X is None:
             self.rates_gait = X_gait
@@ -642,7 +646,7 @@ class CortProcessor:
 
     def apply_PCA(self, dims=None, X=None):
         '''
-        this is todo, probably doesn't work.
+        this works now?
         '''
         if X is None:
             X=self.data['rates']
