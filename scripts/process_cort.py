@@ -1,4 +1,4 @@
-from src.cort_processor import *
+from src.cort_processor_2 import *
 import pickle
 import argparse
 
