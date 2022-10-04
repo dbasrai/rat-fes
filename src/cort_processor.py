@@ -644,7 +644,7 @@ class CortProcessor:
         
         return phase_list #use np.hstack on output to get continuous
 
-    def apply_PCA(self, dims=None, X=None):
+    def apply_PCA(self, dims=None, X=None, transformer=None):
         '''
         this works now?
         '''
@@ -653,13 +653,18 @@ class CortProcessor:
         if dims is None:
             dims=.95
         X_full = np.vstack(X)
-        pca_object = PCA(n_components = dims)
-        pca_object.fit(X_full)
+        if transformer is None:
+            pca_object = PCA(n_components = dims)
+            pca_object.fit(X_full)
+        else:
+            pca_object = transformer
 
         x_pca = []
 
         for X_recording in X:
             x_pca.append(pca_object.transform(X_recording))
-
+        
+        self.num_components = x_pca[0].shape[1]
+        self.pca_object = pca_object
         return x_pca
 

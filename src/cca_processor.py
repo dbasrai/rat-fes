@@ -11,10 +11,10 @@ from sklearn.preprocessing import StandardScaler
 class CCAProcessor:
     def __init__(self, cp1, cp2, limbfoot_angle=1):
         self.cp1 = cp1
-        self.cp1.get_gait_indices(angle_number=1)
+        self.cp1.get_gait_indices(angle_number=limbfoot_angle)
         
         self.cp2 = cp2
-        self.cp2.get_gait_indices(angle_number=1)
+        self.cp2.get_gait_indices(angle_number=limbfoot_angle)
         self.limbfoot_angle=limbfoot_angle
         
         self.data = {}
@@ -26,13 +26,13 @@ class CCAProcessor:
         self.sort_and_align()
 
         
-        self.data['cp1']['h'], self.data['cp1']['proc_vaf'], nada, nada =\
-        self.cp1.decode_angles(X=[self.data['cp1']['proc_x']],\
-        Y=[self.data['cp1']['proc_y']])
+       # self.data['cp1']['h'], self.data['cp1']['proc_vaf'], nada, nada =\
+       # self.cp1.decode_angles(X=[self.data['cp1']['proc_x']],\
+       # Y=[self.data['cp1']['proc_y']])
 
-        self.data['cp2']['h'], self.data['cp2']['proc_vaf'], nada, nada =\
-        self.cp2.decode_angles(X=[self.data['cp2']['proc_x']],\
-        Y=[self.data['cp2']['proc_y']])
+       # self.data['cp2']['h'], self.data['cp2']['proc_vaf'], nada, nada =\
+       # self.cp2.decode_angles(X=[self.data['cp2']['proc_x']],\
+       # Y=[self.data['cp2']['proc_y']])
 
         print(self.data['cp1']['proc_x'].shape)
         print(self.data['cp1']['proc_y'].shape)
@@ -84,6 +84,9 @@ class CCAProcessor:
         self.data['cp1']['pca_x'] = pca_cp1.fit_transform(cp1_x)
         self.data['cp2']['pca_x'] = pca_cp2.fit_transform(cp2_x)
 
+        self.data['cp1']['pca_transformer'] = pca_cp1
+        self.data['cp2']['pca_transformer'] = pca_cp2
+
         return self.data['cp1']['pca_x'], self.data['cp2']['pca_x']
 
     def apply_CCA(self, cp1_x=None, cp2_x=None, preset_num_components=None,
@@ -97,7 +100,8 @@ class CCAProcessor:
             num_components = preset_num_components
 
         if cp1_x is None:
-            cp1_x = self.data['cp1']['pca_x']
+            if transformer is None:
+                cp1_x = self.data['cp1']['pca_x']
         if cp2_x is None:
             cp2_x = self.data['cp2']['pca_x']
 
@@ -245,3 +249,17 @@ class CCAProcessor:
             new_array.append(array[:subsize, :])
  
         return new_array[0], new_array[1], new_array[2], new_array[3]
+
+    def overwrite_subsample(self, percent, cp1_x=None, cp1_y=None,
+            cp2_x=None,cp2_y=None):
+
+        if cp1_x is None:
+            cp1_x = self.cp1.data['rates']
+        if cp1_y is None:
+            cp1_y = self.cp1.data['angles']
+        if cp2_x is None:
+            cp2_x = self.cp2.data['rates']
+        if cp2_y is None:
+            cp2_y = self.cp2.data['angles']
+
+        return
