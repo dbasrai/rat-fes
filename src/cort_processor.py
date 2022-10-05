@@ -7,6 +7,9 @@ from src.wiener_filter import *
 from src.folder_handler import *
 from src.tdt_support import *
 from src.decoders import *
+from src.phase_decoder_support import *
+from astropy.stats import circcorrcoef
+from astropy import units as u
 
 from scipy.signal import resample, find_peaks
 
@@ -254,6 +257,7 @@ class CortProcessor:
             kin = np.vstack(formatted_angles)
         else:
             kin = np.hstack(formatted_angles)
+        
         return np.squeeze(rates), np.squeeze(kin)
 
     def stitch_data(self, firing_rates_list, resampled_angles_list):
@@ -282,7 +286,7 @@ class CortProcessor:
             else:
                 X, Y = self.stitch_and_format(X, Y)
             h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y)
-   
+            self.h_angle = h_angle
             return h_angle, vaf_array, final_test_x, final_test_y
         except:
             print('did you run process() first.')
@@ -297,10 +301,54 @@ class CortProcessor:
             X,Y = self.stitch_and_format(self.data['rates'],
                     self.data['toe_height'])
             h_toe, vaf_array, final_test_x, final_test_y = decode_kfolds_single(X, Y)
+            self.h_toe = h_toe
             return h_toe, vaf_array, final_test_x, final_test_y
         except:
             print('did you run process_toe_height() yet?????')
+            
+    def decode_phase(self, rates=None, angles=None):
+        if rates is None and angles is None:
+            full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
+                        self.data['angles'])
 
+        else:
+            full_rates, full_angles = self.stitch_and_format(rates, angles)
+        phase_list = []
+        for i in range(full_angles.shape[1]):
+            peak_list = tailored_peaks(full_angles, i)
+            phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
+            phase_list.append(phase_list_tmp)
+        phase_list = np.array(phase_list).T
+        sin_array, cos_array = sine_and_cosine(phase_list)
+        h_sin, _, _, _ = decode_kfolds(X=full_rates, Y=sin_array)
+        h_cos, _, _, _ = decode_kfolds(X=full_rates, Y=cos_array)
+        predicted_sin = predicted_lines(full_rates, h_sin)
+        predicted_cos = predicted_lines(full_rates, h_cos)
+        arctans = arctan_fn(predicted_sin, predicted_cos)
+        # corr_array = []
+        # for i in range(phase_list.shape[1]):
+        #     corr = circcorrcoef(phase_list[:,i]*u.deg, arctans[:,i]*u.deg)
+        #     corr_array.append(corr)
+        r_array = []
+        for i in range(phase_list.shape[1]):
+            r, p = stats.pearsonr(phase_list[:,i], arctans[:,i])
+            r_array.append(r)
+        self.phase_list = phase_list
+        self.h_sin = h_sin
+        self.h_cos = h_cos
+        return arctans, phase_list, r_array
+    
+    def get_H(self, H):
+        if H == 'toe':
+            H_mat = self.h_toe
+        if H == 'angle':
+            H_mat = self.h_angle
+        if H == 'cos':
+            H_mat = self.h_cos
+        if H == 'sin':
+            H_mat = self.h_sin
+        return H_mat
+        
     def get_gait_indices(self, Y=None):
         '''
         This takes a kinematic variable, and returns indices where each peak is
@@ -530,3 +578,26 @@ class CortProcessor:
 
         return self.PCA_rate_list, pca_output
 
+    def predicted_lines_malleable(self, h_sin, h_cos):
+        try:  
+            full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
+                            self.data['angles'])
+            phase_list = self.phase_list
+            sin_array, cos_array = sine_and_cosine(phase_list)
+            predicted_sin = predicted_lines(full_rates, h_sin)
+            predicted_cos = predicted_lines(full_rates, h_cos)
+            arctans = arctan_fn(predicted_sin, predicted_cos)
+            # corr_array = []
+            # for i in range(phase_list.shape[1]):
+            #     corr = circcorrcoef(phase_list[:,i]*u.deg, arctans[:,i]*u.deg)
+            #     corr_array.append(corr)
+            r_array = []
+            for i in range(phase_list.shape[1]):
+                r, p = stats.pearsonr(phase_list[:,i], arctans[:,i])
+                r_array.append(r)
+            return arctans, phase_list, r_array
+        except:
+            print('error lol')
+            print('Feed in sin and cos H matricies from another session to test gernealizability')
+            
+            
