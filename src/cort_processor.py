@@ -542,9 +542,12 @@ class CortProcessor:
         similar to divide into gaits, but instead of just dividing, it also
         removes any gait cycles that have a much smaller or much larger amount
         of samples. in a sense it divies up gaits and removes bad ones.
+
+        must run get gait indices first!
         '''
         if gait_indices is None:
             gait_indices = self.gait_indices
+            print(self.gait_indices)
         
         if avg_gait_samples is None:
             avg_gait_samples = self.avg_gait_samples
@@ -567,17 +570,18 @@ class CortProcessor:
             return
 
        
-        
+        #above = slow gait cycles, below = too fast gait cycles 
         above = 1.33 * avg_gait_samples
         below = .66 * avg_gait_samples
         bads_list = []
         for idx in gait_indices:
-
+            #we are iterating and adding to a list any too slow or fast gaits
             bad_above = np.argwhere(np.diff(idx)>above)
             bad_below = np.argwhere(np.diff(idx)<below)
 
             bads_list.append(np.squeeze(np.concatenate((bad_above,
                 bad_below))).tolist())
+            #bad_list now has all the indices of bad gait cycles!
         proc_rates = []
         proc_angles = []
         for i, trial_indices in enumerate(gait_indices):
@@ -585,6 +589,7 @@ class CortProcessor:
             trial_angle_gait = []
             for j in range(np.size(trial_indices)-1):
                 if j in bads_list[i]:
+                    #skip if its a bad gait cycle!
                     continue
                 else:
                     end = trial_indices[j+1]
