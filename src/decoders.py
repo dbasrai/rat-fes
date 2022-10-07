@@ -70,12 +70,11 @@ def apply_PCA(X, dims):
     return X_pca_output, pca_output
 
 
-def ridge_fit(b0, x, y, my_alpha=1.0):
+def ridge_fit(b0, x_format, y_format, my_alpha=100.0, angle=1):
     #b0 = day0 decoder weights
-    #x = dayk x values (usually PCA)
-    #y = dayk y values
+    #x = dayk x values (usually PCA) (FORMATTED)
+    #y = dayk y values (FORMATTED)
 
-    x_format, y_format = format_data(x, y)
     xb0 = test_wiener_filter(x_format, b0)
 
     initial_vaf = vaf(y_format[:,1], xb0[:,1])
@@ -92,12 +91,12 @@ def ridge_fit(b0, x, y, my_alpha=1.0):
     wpost = b + b0
 
     ywpost = test_wiener_filter(x_format, wpost)
-    new_vaf = vaf(y_format[:,1], ywpost[:,1])
+    new_vaf = vaf(y_format[:,angle], ywpost[:,angle])
     print(f'new_scoring is: {new_vaf}')
 
-    return wpost
+    return wpost, ywpost
 
-def regression_fit(b0, x, y):
+def regression_fit(b0, x, y, angle=1):
     #b0 = day0 decoder weights
     #x = dayk x values (usually PCA)
     #y = dayk y values
@@ -118,7 +117,7 @@ def regression_fit(b0, x, y):
 
     wpost = b + b0
     ywpost = test_wiener_filter(x_format, wpost)
-    new_vaf = vaf(y_format[:,1], ywpost[:,1])
+    new_vaf = vaf(y_format[:,angle], ywpost[:,angle])
 
     print(f'new_scoring is: {new_vaf}')
 

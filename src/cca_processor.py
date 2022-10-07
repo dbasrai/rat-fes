@@ -89,21 +89,54 @@ class CCAProcessor:
 
         return self.data['cp1']['pca_x'], self.data['cp2']['pca_x']
 
+    def apply_CCA_clean(self, cp1_x=None, cp2_x=None, transformer=None):
+        if cp1_x is None:
+            if transformer is None:
+                cp1_x = self.data['cp1']['proc_x']        
+        if cp2_x is None:
+            cp2_x = self.data['cp2']['proc_x']
+
+        num_components = cp2_x.shape[0]
+
+        if transformer is None:
+            cca_cp1cp2 = CCA(n_components = num_components, scale=False)
+            x1_cca, x2_cca=cca_cp1cp2.fit_transform(cp1_x, cp2_x)
+        else:
+            cca_cp1cp2 = transformer
+            nada, x2_cca = cca_cp1cp2.transform(cp2_x, cp2_x)
+
+        self.cca = cca_cp1cp2
+        self.x2_cca = x2_cca
+
+        x2_into_x1 = cca_cp1cp2.inverse_transform(x2_cca)
+
+        return cca_cp1cp2, x2_into_x1
+
+
     def apply_CCA(self, cp1_x=None, cp2_x=None, preset_num_components=None,
-            transformer=None):
+            transformer=None, no_pca=False):
         if preset_num_components is None:
-            try:
-                num_components = self.num_components
-            except:
-                print('set num copmoentns')
+            if no_pca:
+                pass
+            else:
+                try:
+                    num_components = self.num_components
+                except:
+                    print('set num copmoentns')
         else:
             num_components = preset_num_components
 
         if cp1_x is None:
             if transformer is None:
-                cp1_x = self.data['cp1']['pca_x']
+                if no_pca is True:
+                    cp1_x = self.data['cp1']['proc_x']
+                else:
+                    cp1_x = self.data['cp1']['pca_x']
         if cp2_x is None:
-            cp2_x = self.data['cp2']['pca_x']
+            if no_pca is True:
+                cp2_x = self.data['cp2']['proc_x']
+            else:
+                cp2_x = self.data['cp2']['pca_x']
 
         if transformer is None:
             cca_cp1cp2 = CCA(n_components = num_components, scale=False)
@@ -250,16 +283,30 @@ class CCAProcessor:
  
         return new_array[0], new_array[1], new_array[2], new_array[3]
 
-    def overwrite_subsample(self, percent, cp1_x=None, cp1_y=None,
-            cp2_x=None,cp2_y=None):
+    def apply_ridge(self, reduce_dims=False, angle=3):
+        if reduce_dims:
+            x1 = self.data['cp1']['pca_x']
+            x2 = self.data['cp2']['pca_x']
+        else:
+            x1 = self.data['cp1']['proc_x']
+            x2 = self.data['cp2']['proc_x']
+        
+        y1 = self.data['cp1']['proc_y']
+        y2 = self.data['cp2']['proc_y']
+        
 
-        if cp1_x is None:
-            cp1_x = self.cp1.data['rates']
-        if cp1_y is None:
-            cp1_y = self.cp1.data['angles']
-        if cp2_x is None:
-            cp2_x = self.cp2.data['rates']
-        if cp2_y is None:
-            cp2_y = self.cp2.data['angles']
+        b0, nada, nada, nada = self.cp1.decode_angles(scale=True) 
+        transformer, x2_cca = self.apply_CCA_clean(cp1_x = x1, cp2_x = x2)
+        scaler=StandardScaler()
+        x2_scca = scaler.fit_transform(x2_cca)
+        
+        x2_scca_format, y2_format = format_data(x2_scca, y2)
 
-        return
+        wpost, ywpost = ridge_fit(b0, x2_scca_format, y2_format, my_alpha=100,
+                angle=angle)
+
+        return transformer, wpost, ywpost
+
+    def quick_cca(self, x, transformer):
+        nada, temp=transformer.transform(x,x)
+        return transformer.inverse_transform(temp)

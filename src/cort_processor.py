@@ -311,7 +311,7 @@ class CortProcessor:
         return new_x, new_y
         
 
-    def decode_angles(self, X=None, Y=None):
+    def decode_angles(self, X=None, Y=None, scale=False):
         """
         takes list of rates, angles, then using a wiener filter to decode. 
         if no parameters are passed, uses data['rates'] and data['angles']
@@ -325,7 +325,9 @@ class CortProcessor:
                 X = self.data['rates']
             if Y is None:
                 Y = self.data['angles']
-
+            
+            if scale is True:
+                X = self.apply_scaler(X)
             X, Y = self.stitch_and_format(X,Y)
 
             h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y)
@@ -375,7 +377,7 @@ class CortProcessor:
         samples_list = []
         for angle in limbfoot_angles:
 
-            temp_peaks, nada = find_peaks(angle, prominence=10)
+            temp_peaks, nada = find_peaks(angle, prominence=10, distance=5)
             avg_ = np.average(angle[temp_peaks])
             std_ = np.std(angle[temp_peaks])
 
@@ -673,3 +675,29 @@ class CortProcessor:
         self.pca_object = pca_object
         return x_pca
 
+
+    def apply_scaler(self, X=None, scaler=None):
+        if X is None:
+            X=self.data['rates']
+        if scaler is None:
+            my_scaler=StandardScaler()
+            X_full = np.vstack(X)
+            my_scaler.fit(X_full)
+        else:
+            my_scaler = scaler
+        
+        scaled_X = []
+        for X_recording in X:
+            scaled_X.append(my_scaler.transform(X_recording))
+        
+        self.scaler = my_scaler
+        return scaled_X
+
+
+    def display_frame(self, video_path, sample_number):
+        cap = cv2. VideoCapture(video_path)
+        cap.set(1, frame_number)
+        ret, frame = cap.read()
+
+        fig, ax = plt.subplots()
+        ax.plot(frame)
