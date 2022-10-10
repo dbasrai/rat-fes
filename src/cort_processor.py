@@ -587,15 +587,12 @@ class CortProcessor:
             predicted_sin = predicted_lines(full_rates, h_sin)
             predicted_cos = predicted_lines(full_rates, h_cos)
             arctans = arctan_fn(predicted_sin, predicted_cos)
-            # corr_array = []
-            # for i in range(phase_list.shape[1]):
-            #     corr = circcorrcoef(phase_list[:,i]*u.deg, arctans[:,i]*u.deg)
-            #     corr_array.append(corr)
-            r_array = []
-            for i in range(phase_list.shape[1]):
-                r, p = stats.pearsonr(phase_list[:,i], arctans[:,i])
-                r_array.append(r)
-            return arctans, phase_list, r_array
+            r2_array = []
+            for i in range(sin_array.shape[1]):
+                r2_sin = r2_score(sin_array[:,i], predicted_sin[:,i])
+                r2_cos = r2_score(cos_array[:,i], predicted_cos[:,i])
+                r2_array.append(np.mean((r2_sin,r2_cos)))
+            return arctans, phase_list, r2_array
         except:
             print('error lol')
             print('Feed in sin and cos H matricies from another session to test gernealizability')
