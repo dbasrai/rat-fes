@@ -9,7 +9,9 @@ from sklearn.cross_decomposition import CCA
 from sklearn.preprocessing import StandardScaler
 
 class CCAProcessor:
-    def __init__(self, cp1, cp2, limbfoot_angle=1):
+    def __init__(self, cp1, cp2, limbfoot_angle=1, align=0):
+        #align = 0 is sorting and stitching
+        #align = 1 is resampling
         self.cp1 = cp1
         self.cp1.get_gait_indices(angle_number=limbfoot_angle)
         
@@ -21,9 +23,19 @@ class CCAProcessor:
         self.data['cp1'] = {}
         self.data['cp2'] = {}
 
-        self.data['cp1']['proc_x'], self.data['cp1']['proc_y'],\
-        self.data['cp2']['proc_x'], self.data['cp2']['proc_y'] =\
-        self.sort_and_align()
+        if align==0:
+
+            self.data['cp1']['proc_x'], self.data['cp1']['proc_y'],\
+            self.data['cp2']['proc_x'], self.data['cp2']['proc_y'] =\
+            self.sort_and_align()
+
+        elif align==1:
+
+            self.data['cp1']['proc_x'], self.data['cp1']['proc_y'],\
+            self.data['cp2']['proc_x'], self.data['cp2']['proc_y'] =\
+            self.process_and_align_kinematics()
+
+
 
         
        # self.data['cp1']['h'], self.data['cp1']['proc_vaf'], nada, nada =\
@@ -156,7 +168,7 @@ class CCAProcessor:
 
         print(self.check_same_kinematics())
 
-        avg_samples = self.cp1.avg_gait_samples #arbitrarily grab from 1
+        avg_samples = self.cp2.avg_gait_samples #arbitrarily grab from 1
         cp1_gait_x, cp1_gait_y = self.cp1.remove_bad_gaits()
         cp2_gait_x, cp2_gait_y = self.cp2.remove_bad_gaits(avg_gait_samples =
                 avg_samples)
@@ -201,7 +213,7 @@ class CCAProcessor:
         cp2_gait_x = cp2_gait_x[0]
         cp2_gait_y = cp2_gait_y[0]
         
-        cp1_avg_gaits = self.cp1.avg_gait_samples
+        cp1_avg_gaits = self.cp2.avg_gait_samples
 
         cp1_x_sortdict={}
         cp1_y_sortdict={}
@@ -307,6 +319,8 @@ class CCAProcessor:
 
         return transformer, wpost, ywpost
 
-    def quick_cca(self, x, transformer):
+    def quick_cca(self, x, transformer, scale=True):
         nada, temp=transformer.transform(x,x)
-        return transformer.inverse_transform(temp)
+        temp2 = transformer.inverse_transform(temp)
+        scaler = StandardScaler()
+        return scaler.fit_transform(temp2)

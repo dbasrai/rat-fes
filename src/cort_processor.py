@@ -11,6 +11,7 @@ from src.decoders import *
 from scipy.signal import resample, find_peaks
 from sklearn.decomposition import PCA
 import scipy.io as sio
+import cv2
 
 class CortProcessor:
     '''
@@ -478,78 +479,12 @@ class CortProcessor:
         similar to divide into gaits, but instead of just dividing, it also
         removes any gait cycles that have a much smaller or much larger amount
         of samples. in a sense it divies up gaits and removes bad ones.
-        '''
-        if gait_indices is None:
-            gait_indices = self.gait_indices
-        
-        if avg_gait_samples is None:
-            avg_gait_samples = self.avg_gait_samples
- 
-        if X is None:
-            rates = self.data['rates']
-        elif isinstance(X, list):
-            rates = X
-        else: 
-            print('X must be list')
-            return
-
-
-        if Y is None:
-            angles = self.data['angles']
-        elif isinstance(Y, list):
-            angles = Y
-        else:
-            print('Y must be list')
-            return
-
-       
-        
-        above = 1.33 * avg_gait_samples
-        below = .66 * avg_gait_samples
-        bads_list = []
-        for idx in gait_indices:
-
-            bad_above = np.argwhere(np.diff(idx)>above)
-            bad_below = np.argwhere(np.diff(idx)<below)
-
-            bads_list.append(np.squeeze(np.concatenate((bad_above,
-                bad_below))).tolist())
-        proc_rates = []
-        proc_angles = []
-        for i, trial_indices in enumerate(gait_indices):
-            trial_rate_gait = []
-            trial_angle_gait = []
-            for j in range(np.size(trial_indices)-1):
-                if j in bads_list[i]:
-                    continue
-                else:
-                    end = trial_indices[j+1]
-                    start = trial_indices[j]
-
-                    temp_rate = rates[i][start:end,:]
-                    temp_angle = angles[i][start:end,:]
-                    if bool_resample:
-                        temp_rate = resample(temp_rate, avg_gait_samples, axis=0)
-                        temp_angle = resample(temp_angle, avg_gait_samples, axis=0)
-                    trial_rate_gait.append(temp_rate)
-                    trial_angle_gait.append(temp_angle)
- 
-            proc_rates.append(trial_rate_gait)
-            proc_angles.append(trial_angle_gait)
-
-        return np.vstack(proc_rates), np.vstack(proc_angles)
-    def remove_bad_gaits(self, X=None, Y=None, gait_indices=None,
-            avg_gait_samples = None, bool_resample=True):
-        '''
-        similar to divide into gaits, but instead of just dividing, it also
-        removes any gait cycles that have a much smaller or much larger amount
-        of samples. in a sense it divies up gaits and removes bad ones.
 
         must run get gait indices first!
         '''
         if gait_indices is None:
             gait_indices = self.gait_indices
-            print(self.gait_indices)
+            #print(self.gait_indices)
         
         if avg_gait_samples is None:
             avg_gait_samples = self.avg_gait_samples
@@ -694,10 +629,12 @@ class CortProcessor:
         return scaled_X
 
 
-    def display_frame(self, video_path, sample_number):
+    def display_frame(self, video_path, recording_number, sample_number):
         cap = cv2. VideoCapture(video_path)
-        cap.set(1, frame_number)
+        crop_times = self.crop_list[recording_number]
+        first_frame = crop_times[0] * 200
+        my_frame = first_frame + (sample_number * 4)
+        cap.set(1, my_frame)
         ret, frame = cap.read()
 
-        fig, ax = plt.subplots()
-        ax.plot(frame)
+        return frame
