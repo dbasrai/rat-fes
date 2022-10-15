@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.signal import butter, lfilter, iirnotch, filtfilt, resample
 from scipy.io import savemat
+import signal
 
 #this is written with data as feature x samples. so I transpose so it works
 #with samples x features
