@@ -51,6 +51,49 @@ def autothreshold_crossings(neural, multiplier): #this finds all upwards thresho
 
     return np.array(spikes).T #samples x spikes
 
+def threshold_crossings_refrac(neural, multiplier):  # (negative peaks only)
+    neural = neural.T
+    refrac = 0.0005
+    spikes_tmp = []
+    
+    for channel in neural:
+        std = np.std(channel)
+        crossings = np.diff(channel < multiplier*std, prepend=0)
+        np.put(crossings, np.where(crossings==-1), 0) #only catch crossing
+        spikes_tmp.append(crossings)
+
+    return np.array(spikes_tmp).T #samples x spikes
+
+def refractory_limit(spikes_tmp, fs, refrac = 0.0005):  #accounts for an absolute refractory period to prevent jagged peaks from counting as multiple events
+    spikes = []
+    spikes_tmp = spikes_tmp.T
+    length = spikes_tmp.shape[1]
+    for channel in spikes_tmp:
+        spikeindex = np.where(channel == 1)[0]
+        spikeindex = spikeindex.astype('float64')
+        for i in range(spikeindex[:-1].shape[0]):
+            j = 1
+            nextiter = False
+            if np.isnan(spikeindex[i]):
+                nextiter = True
+            while not nextiter:
+                try:
+                    if (spikeindex[i+j]-spikeindex[i])/fs < refrac:
+                        spikeindex[i+j] = np.nan
+                        j = j+1
+                    else:
+                        nextiter = True
+                except:
+                    nextiter = True
+        clean_spikeindex = spikeindex[~np.isnan(spikeindex)]
+        clean_spikeindex = clean_spikeindex.astype('int64')
+        channel_spikes = np.zeros(length)
+        for i in clean_spikeindex:
+            channel_spikes[i] = 1
+        spikes.append(channel_spikes)
+    spikes = np.array(spikes, dtype = "int64").T
+    return spikes
+
 def spike_binner(spikes, fs, binsize=0.05):
     spikes = spikes.T
 

@@ -135,8 +135,9 @@ class CortProcessor:
             clean_filtered_neural = fresh_filt(commonmode, 350, 8000, fs, order = 4)
 
             #extract spike and bin
-            spikes = autothreshold_crossings(clean_filtered_neural,
+            spikes_tmp = threshold_crossings_refrac(clean_filtered_neural,
                     threshold_multiplier)
+            spikes = refractory_limit(spikes_tmp, fs)
             firing_rates = spike_binner(spikes, fs, binsize)
             
             self.data['rates'].append(firing_rates)
