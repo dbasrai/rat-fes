@@ -4,6 +4,7 @@ import gc
 
 from src.neural_analysis import *
 from src.wiener_filter import *
+from src.filters import *
 from src.folder_handler import *
 from src.tdt_support import *
 from src.decoders import *
@@ -84,7 +85,7 @@ class CortProcessor:
 
         return tdt_data_list, kin_data_list
 
-    def process(self, manual_crop_list=None, threshold_multiplier = 3.0, binsize = 0.05):
+    def process(self, manual_crop_list=None, threshold_multiplier = -3.0, binsize = 0.05):
         """
         1) takes raw neural data, then bandpass+notch filters, then extracts
         spikes using threshold_multiplier, then bins into firing rates with bin
@@ -123,8 +124,15 @@ class CortProcessor:
             neural = self.tdt_data[i]['neural'] #quick accessible variable
             
             #notch and bandpass filter
-            filtered_neural = filter_neural(neural, fs)
-            clean_filtered_neural = remove_artifacts(filtered_neural, fs)
+            
+            means = np.mean(neural, axis = 1)
+            commonmode = []
+            for j in range(neural.shape[1]):
+                commonhold = neural[:,j] - means
+                commonmode.append(commonhold)
+            commonmode = np.array(commonmode).T
+            
+            clean_filtered_neural = fresh_filt(commonmode, 350, 8000, fs, order = 4)
 
             #extract spike and bin
             spikes = autothreshold_crossings(clean_filtered_neural,

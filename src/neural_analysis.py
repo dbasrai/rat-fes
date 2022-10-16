@@ -68,8 +68,8 @@ def spike_binner(spikes, fs, binsize=0.05):
 def bandpass_neural(neural,fs):
     neural = neural.T
 
-    # return butter_bandpass_filter(neural, 250, 3000, fs).T
-    return butter_bandpass_filter(neural, 250, 6000, fs).T
+    return butter_bandpass_filter(neural, 250, 3000, fs).T
+    # return butter_bandpass_filter(neural, 350, 8000, fs).T
 
 # def bandpass_neural_test(neural,fs):
 #     neural = neural.T
@@ -81,6 +81,8 @@ def filter_neural(neural, fs):
     neural = neural.T
 
     return notch_filter(bandpass_neural(neural, fs), fs).T
+    # return bandpass_neural(neural, fs).T
+
     
 def average_neural(neural):
     neural = neural.T

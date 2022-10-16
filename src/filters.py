@@ -9,6 +9,12 @@ import signal
 #this is written with data as feature x samples. so I transpose so it works
 #with samples x features
 
+def fresh_filt(neural, lowcut, highcut, fs, order = 5):
+    neural = neural.T
+    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+    y = lfilter(b, a, neural)
+    return y.T
+
 def butter_bandpass(lowcut, highcut, fs, order=2):
     nyq = 0.5 * fs
     low = lowcut / nyq

@@ -7,10 +7,13 @@ from src.wiener_filter import *
 from src.folder_handler import *
 from src.tdt_support import *
 from src.decoders import *
+from src.phase_decoder_support import *
+from sklearn.metrics import r2_score
+
 
 from scipy.signal import resample, find_peaks
 
-class CortProcessor:
+class CortProcessorDeprc:
     '''
     class that can handle neural + kinematic/EMG data simultaneously
     upon initialization, extracts data from TDT and anipose file
@@ -124,7 +127,7 @@ class CortProcessor:
             #notch and bandpass filter
             filtered_neural = filter_neural(neural, fs)
             clean_filtered_neural = remove_artifacts(filtered_neural, fs)
-
+            
             #extract spike and bin
             spikes = autothreshold_crossings(clean_filtered_neural,
                     threshold_multiplier)
@@ -300,6 +303,35 @@ class CortProcessor:
             return h_toe, vaf_array, final_test_x, final_test_y
         except:
             print('did you run process_toe_height() yet?????')
+            
+    def decode_phase(self, rates=None, angles=None):
+        if rates is None and angles is None:
+            full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
+                        self.data['angles'])
+
+        else:
+            full_rates, full_angles = self.stitch_and_format(rates, angles)
+        phase_list = []
+        for i in range(full_angles.shape[1]):
+            peak_list = tailored_peaks(full_angles, i)
+            phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
+            phase_list.append(phase_list_tmp)
+        phase_list = np.array(phase_list).T
+        sin_array, cos_array = sine_and_cosine(phase_list)
+        h_sin, _, _, _ = decode_kfolds(X=full_rates, Y=sin_array)
+        h_cos, _, _, _ = decode_kfolds(X=full_rates, Y=cos_array)
+        predicted_sin = predicted_lines(full_rates, h_sin)
+        predicted_cos = predicted_lines(full_rates, h_cos)
+        arctans = arctan_fn(predicted_sin, predicted_cos)
+        r2_array = []
+        for i in range(sin_array.shape[1]):
+            r2_sin = r2_score(sin_array[:,i], predicted_sin[:,i])
+            r2_cos = r2_score(cos_array[:,i], predicted_cos[:,i])
+            r2_array.append(np.mean((r2_sin,r2_cos)))
+        self.phase_list = phase_list
+        self.h_sin = h_sin
+        self.h_cos = h_cos
+        return arctans, phase_list, r2_array
 
     def get_gait_indices(self, Y=None):
         '''
