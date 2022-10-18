@@ -129,43 +129,45 @@ class CCAProcessor:
 
 
     def apply_CCA(self, cp1_x=None, cp2_x=None, preset_num_components=None,
-            transformer=None, no_pca=False):
-        if preset_num_components is None:
-            if no_pca:
-                pass
+            transformer=None, pca=False):
+        if pca:
+            if preset_num_components is None:
+                num_components = 8
             else:
-                try:
-                    num_components = self.num_components
-                except:
-                    print('set num copmoentns')
+                num_components = preset_num_components
         else:
-            num_components = preset_num_components
+            num_components = cp2_x.shape[1]
 
         if cp1_x is None:
             if transformer is None:
-                if no_pca is True:
-                    cp1_x = self.data['cp1']['proc_x']
-                else:
+                if pca:
                     cp1_x = self.data['cp1']['pca_x']
+                else:
+                    cp1_x = self.data['cp1']['proc_x']
         if cp2_x is None:
-            if no_pca is True:
-                cp2_x = self.data['cp2']['proc_x']
-            else:
+            if pca:
                 cp2_x = self.data['cp2']['pca_x']
+            else:
+                cp2_x = self.data['cp2']['proc_x']
 
         if transformer is None:
             cca_cp1cp2 = CCA(n_components = num_components, scale=False)
             x1_cca, x2_cca=cca_cp1cp2.fit_transform(cp1_x, cp2_x)
         else:
             cca_cp1cp2 = transformer
-            nada, x2_cca = cca_cp1cp2.transform(cp2_x, cp2_x)
+            x1_cca, x2_cca = cca_cp1cp2.transform(cp2_x, cp2_x)
 
         self.cca = cca_cp1cp2
         self.x2_cca = x2_cca
 
+        for i in range(3):
+            corr = np.around(np.corrcoef(x1_cca[:, i], x2_cca[:, i])[0,1], 2)
+            print(f'dim{i} corr is {corr}')
         x2_into_x1 = cca_cp1cp2.inverse_transform(x2_cca)
 
         return cca_cp1cp2, x2_into_x1
+
+
 
     def process_and_align_kinematics(self):
 
@@ -317,7 +319,7 @@ class CCAProcessor:
             b0, nada, nada, nada = self.cp1.decode_angles(X=temp_x_pca)
         else:
             b0, nada, nada, nada = self.cp1.decode_angles(scale=True) 
-        transformer, x2_cca = self.apply_CCA_clean(cp1_x = x1, cp2_x = x2)
+        transformer, x2_cca = self.apply_CCA(cp1_x = x1, cp2_x = x2)
         scaler=StandardScaler()
         x2_scca = scaler.fit_transform(x2_cca)
         
