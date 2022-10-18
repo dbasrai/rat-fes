@@ -637,4 +637,7 @@ class CortProcessor:
         cap.set(1, my_frame)
         ret, frame = cap.read()
 
+        video_time = my_frame/200
+        print(f'video_time is: {video_time}')
+
         return frame

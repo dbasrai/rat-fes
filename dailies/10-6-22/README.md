@@ -1,3 +1,14 @@
+10/17/22
+okay, so SCI just doesn't seem to work! I've messed with both PCA to certain dimensions, and with instead using all 32 channesl, and with a couple different alignment techniques and all doesn't seem to generalize well to the entire test set. Also, when zooming in on certain sections, even the good gaits it doesn't seem to work.
+
+However, I think part of this is likely just poor DLC stuff. We also need to find a way to annotate when the rat is running well. and only use those to train. I think this might help a lot? but i'm not sure. 
+
+Regarding future steps for SCI, we shouuld try on a few more datasets, but I'm optimistic about either uising a really good injureud rat as a preloaded decoder, or using a healing rat that is slowly regaining funciton of its legs to help. vs pre-injury Rat. 
+
+I also did some double checking of my previous results. All seems good.
+
+tomorrow hopefully make some nice figures.
+
 10/11/22
 added plot per percent for Regression Decoder Evaluation.ipynb
 

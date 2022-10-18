@@ -23,6 +23,9 @@ class CCAProcessor:
         self.data['cp1'] = {}
         self.data['cp2'] = {}
 
+        self.data['cp1']['pca_x']=None
+        self.data['cp2']['pca_x']=None
+
         if align==0:
 
             self.data['cp1']['proc_x'], self.data['cp1']['proc_y'],\
@@ -169,9 +172,9 @@ class CCAProcessor:
         print(self.check_same_kinematics())
 
         avg_samples = self.cp2.avg_gait_samples #arbitrarily grab from 1
-        cp1_gait_x, cp1_gait_y = self.cp1.remove_bad_gaits()
-        cp2_gait_x, cp2_gait_y = self.cp2.remove_bad_gaits(avg_gait_samples =
+        cp1_gait_x, cp1_gait_y = self.cp1.remove_bad_gaits(avg_gait_samples =
                 avg_samples)
+        cp2_gait_x, cp2_gait_y = self.cp2.remove_bad_gaits()
 
         
         if len(cp1_gait_x) >= len(cp2_gait_x):
@@ -198,7 +201,7 @@ class CCAProcessor:
         
         return cp1_gait_x, cp1_gait_y, cp2_gait_x, cp2_gait_y 
 
-    def sort_and_align(self, sample_variance =3):
+    def sort_and_align(self, sample_variance =5):
 
         print(self.check_same_kinematics())
         
@@ -213,15 +216,15 @@ class CCAProcessor:
         cp2_gait_x = cp2_gait_x[0]
         cp2_gait_y = cp2_gait_y[0]
         
-        cp1_avg_gaits = self.cp2.avg_gait_samples
+        cp2_avg_gaits = self.cp2.avg_gait_samples
 
         cp1_x_sortdict={}
         cp1_y_sortdict={}
         cp2_x_sortdict={}
         cp2_y_sortdict={}
 
-        var_range = range(cp1_avg_gaits-sample_variance,
-        cp1_avg_gaits+sample_variance+1)
+        var_range = range(cp2_avg_gaits-sample_variance,
+        cp2_avg_gaits+sample_variance+1)
 
         for i in var_range:
             cp1_x_sortdict[i]=[]
@@ -295,10 +298,13 @@ class CCAProcessor:
  
         return new_array[0], new_array[1], new_array[2], new_array[3]
 
-    def apply_ridge(self, reduce_dims=False, angle=3):
+    def apply_ridge(self, reduce_dims=False, dims=None, angle=3):
         if reduce_dims:
-            x1 = self.data['cp1']['pca_x']
-            x2 = self.data['cp2']['pca_x']
+            if self.data['cp1']['pca_x'] is not None:
+                x1 = self.data['cp1']['pca_x']
+                x2 = self.data['cp2']['pca_x']
+            else:
+                x1, x2 = self.apply_PCA(preset_num_components=dims)
         else:
             x1 = self.data['cp1']['proc_x']
             x2 = self.data['cp2']['proc_x']
@@ -306,12 +312,16 @@ class CCAProcessor:
         y1 = self.data['cp1']['proc_y']
         y2 = self.data['cp2']['proc_y']
         
-
-        b0, nada, nada, nada = self.cp1.decode_angles(scale=True) 
+        if reduce_dims:
+            temp_x_pca = self.cp1.apply_PCA(dims = x1.shape[1])
+            b0, nada, nada, nada = self.cp1.decode_angles(X=temp_x_pca)
+        else:
+            b0, nada, nada, nada = self.cp1.decode_angles(scale=True) 
         transformer, x2_cca = self.apply_CCA_clean(cp1_x = x1, cp2_x = x2)
         scaler=StandardScaler()
         x2_scca = scaler.fit_transform(x2_cca)
         
+        print(x2_scca.shape, y2.shape)
         x2_scca_format, y2_format = format_data(x2_scca, y2)
 
         wpost, ywpost = ridge_fit(b0, x2_scca_format, y2_format, my_alpha=100,
