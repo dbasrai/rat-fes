@@ -5,6 +5,8 @@ However, I think part of this is likely just poor DLC stuff. We also need to fin
 
 Regarding future steps for SCI, we shouuld try on a few more datasets, but I'm optimistic about either uising a really good injureud rat as a preloaded decoder, or using a healing rat that is slowly regaining funciton of its legs to help. vs pre-injury Rat. 
 
+also need to try alignment on forelimb on two pre-sci datasets from Grant
+
 I also did some double checking of my previous results. All seems good.
 
 tomorrow hopefully make some nice figures.

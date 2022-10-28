@@ -61,13 +61,13 @@ def decode_kfolds_single(X, Y, k=10):
     
     return best_h, np.average(np.array(vaf_average)), final_test_x, final_test_y
 
-def apply_PCA(X, dims):
-    pca_output = PCA(n_components=dims, random_state=2020)
-    pca_output.fit(X)
+#def apply_PCA(X, dims):
+#    pca_output = PCA(n_components=dims, random_state=2020)
+#    pca_output.fit(X)
 
-    X_pca_output = pca_output.transform(X)
+#    X_pca_output = pca_output.transform(X)
 
-    return X_pca_output, pca_output
+#    return X_pca_output, pca_output
 
 
 def ridge_fit(b0, x_format, y_format, my_alpha=100.0, angle=1):
@@ -122,3 +122,33 @@ def regression_fit(b0, x, y, angle=1):
     print(f'new_scoring is: {new_vaf}')
 
     return wpost
+
+def pinv_fit(b0, x_format, y_format, angle=1):
+    b0_no_offset = b0[1:,:]
+    offset = b0[0,:]
+    inv_b0 = np.linalg.pinv(b0_no_offset)
+    #print(inv_b0.shape)
+    #x_format, y_format = format_data(x, y)    
+    y_star = np.dot(y_format - offset, inv_b0)
+    #x_plus_bias = np.c_[np.ones((np.size(x_format, 0), 1)), x_format]
+
+        
+
+    clf = LinearRegression()
+    clf.fit(x_format, y_star)
+
+    return clf
+
+
+
+
+
+
+
+
+
+
+
+
+
+

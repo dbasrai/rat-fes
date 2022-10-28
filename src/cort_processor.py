@@ -43,6 +43,8 @@ class CortProcessor:
         else:
             print('this is filipe data i belive')
             self.handler = sio.loadmat(folder_path)
+            self.gait_indices=None
+            self.avg_gait_samples=None
             self.extract_filipe()
 
     def extract_filipe(self):
@@ -366,18 +368,18 @@ class CortProcessor:
         Divide_into_gaits for instance takes in these indices, and divides both
         the kinematics and rates into gait cycles.
         '''
-        limbfoot_angles = []
         if Y is None:
-            for angles in self.data['angles']:
-                limbfoot_angles.append(angles[:,angle_number])
+            Y_ = self.data['angles']
         else:
             assert isinstance(Y, list), 'Y must be a list'
-            limbfoot_angles = Y
+            Y_=Y
 
         gait_indices = []
         samples_list = []
-        for angle in limbfoot_angles:
-
+        for angle in Y_:
+            if angle.ndim > 1:
+                angle = angle[:, angle_number]
+            print(angle.shape)
             temp_peaks, nada = find_peaks(angle, prominence=10, distance=5)
             avg_ = np.average(angle[temp_peaks])
             std_ = np.std(angle[temp_peaks])
@@ -393,11 +395,13 @@ class CortProcessor:
             peaks = np.insert(peaks, 0, 0)
             gait_indices.append(peaks)
             samples_list.append(np.diff(peaks))
+
         
         if len(samples_list) > 1:
             samples = np.concatenate(samples_list)
         else:
             samples = samples_list[0]
+
         avg_gait_samples = int(np.round(np.average(samples)))
         
         if Y is None:
