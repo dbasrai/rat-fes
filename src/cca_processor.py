@@ -105,6 +105,8 @@ class CCAProcessor:
         return self.data['cp1']['pca_x'], self.data['cp2']['pca_x']
 
     def apply_CCA_clean(self, cp1_x=None, cp2_x=None, transformer=None):
+        ''' deprecated i think'''
+
         if cp1_x is None:
             if transformer is None:
                 cp1_x = self.data['cp1']['proc_x']        
@@ -388,6 +390,28 @@ class CCAProcessor:
         clf = pinv_fit(decoder, x_format, y_format)
 
         return clf
+
+    def remove_cp2_channels(self):
+        samples = self.cp2.data['rates'][0].shape[0]
+        channels = self.cp1.data['rates'][0].shape[1]
+        new_cp2_rates = np.zeros((samples, channels))
+
+        cp1_channels = self.cp1.data['which_channels']
+        cp2_channels = self.cp2.data['which_channels']
+
+        if len(cp2_channels) < len(cp1_channels):
+            print('less channels, i dunno what to do, returning nothing')
+            return
+        else:
+            i=0
+            for idx, channel in enumerate(cp1_channels):
+                if channel in cp2_channels:
+                    new_cp2_rates[:, i] = self.cp2.data['rates'][0][:, idx] 
+
+                i=i+1
+
+        return new_cp2_rates
+
 
 
         

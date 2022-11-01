@@ -12,6 +12,7 @@ from scipy.signal import resample, find_peaks
 from sklearn.decomposition import PCA
 import scipy.io as sio
 import cv2
+import copy
 
 class CortProcessor:
     '''
@@ -62,6 +63,32 @@ class CortProcessor:
         angle_names = ['ankle', 'limbfoot', 'hip', 'knee', 'toeheight']
         self.data['angle_names'] = angle_names
 
+        temp_channels  =\
+        self.handler['SelectedFieldDatastruct']['FieldCh2Use'][0][0][0].tolist()
+        
+        which_channels = copy.deepcopy(temp_channels)
+        for idx in range(temp_rates.shape[1]):
+            if np.average(temp_rates[:, idx]) < .1:
+                baddy = temp_channels[idx]
+                which_channels.remove(baddy)
+
+        self.data['which_channels'] = which_channels
+#        samples = temp_rates.shape[0]
+#        num_channels = 32
+#        original_rates = np.zeros((samples, num_channels))
+#
+#        for idx in range(num_channels):
+#            if idx in which_channels:
+#                position = np.where(which_channels==idx)[0][0]
+#                if np.average(temp_rates[:, position]) > .1:
+#                    original_rates[:, idx] = temp_rates[:, position]
+#                else:
+#                    original_rates[:,idx] = np.nan
+#            else:
+#                original_rates[:,idx] = np.nan
+#
+#        self.data['original_rates'] = [original_rates]
+#
     def parse_config(self):
         '''
         this loads config.yaml file

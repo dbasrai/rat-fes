@@ -64,6 +64,8 @@ def plot_wiener_filter_predic(test_x, test_y, h):
     ax.plot(ts, test_y, c='black')
     ax.plot(ts, predic_y, c='red')
 
+    return fig, ax
+
 def plot_both(array1, array2, subsample=5): #stupid function to save time tonight
     fig = plt.figure()
     ax = fig.add_subplot()
