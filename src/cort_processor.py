@@ -125,16 +125,18 @@ class CortProcessor:
             
             #notch and bandpass filter
             
-            means = np.mean(neural, axis = 1)
-            commonmode = []
-            for j in range(neural.shape[1]):
-                commonhold = neural[:,j] - means
-                commonmode.append(commonhold)
-            commonmode = np.array(commonmode).T
+            ##common mode rejection assumes equal impedence and is therefore not recommended 
+            # means = np.mean(neural, axis = 1)
+            # commonmode = []
+            # for j in range(neural.shape[1]):
+            #     commonhold = neural[:,j] - means
+            #     commonmode.append(commonhold)
+            # commonmode = np.array(commonmode).T
             
-            clean_filtered_neural = fresh_filt(commonmode, 350, 8000, fs, order = 4)
+            filtered_neural = fresh_filt(neural, 350, 8000, fs, order = 4)
+            clean_filtered_neural = remove_artifacts(filtered_neural, fs)
 
-            #extract spike and bin
+            #extract spike, impose refeactory limit (post artifact rejection) and bin
             spikes_tmp = threshold_crossings_refrac(clean_filtered_neural,
                     threshold_multiplier)
             spikes = refractory_limit(spikes_tmp, fs)
