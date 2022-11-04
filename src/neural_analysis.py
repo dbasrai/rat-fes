@@ -7,7 +7,6 @@ from src.filters import *
 
 #i initially wrote these thinking neural is channels x samples, but more
 # standard is samples x channels. I just transpose all functions. its easier.
-
 def threshold_crossings(neural, threshold): #this finds all upwards threshold crossings, no artifact detection
 
     neural = neural.T

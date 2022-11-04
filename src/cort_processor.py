@@ -341,7 +341,7 @@ class CortProcessor:
         return new_x, new_y
         
 
-    def decode_angles(self, X=None, Y=None, scale=False):
+    def decode_angles(self, X=None, Y=None, metric=3, scale=False):
         """
         takes list of rates, angles, then using a wiener filter to decode. 
         if no parameters are passed, uses data['rates'] and data['angles']
@@ -360,7 +360,8 @@ class CortProcessor:
                 X = self.apply_scaler(X)
             X, Y = self.stitch_and_format(X,Y)
 
-            h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y)
+            h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y,
+                    metric=metric)
             
    
             return h_angle, vaf_array, final_test_x, final_test_y

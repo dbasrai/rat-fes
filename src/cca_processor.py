@@ -72,7 +72,8 @@ class CCAProcessor:
             output = 'kinematics are different'
             return output
 
-    def apply_PCA(self, cp1_x=None, cp2_x=None, preset_num_components = None):
+    def apply_PCA(self, cp1_x=None, cp2_x=None, preset_num_components = None,
+            day_0_transformer=None):
 
         if cp1_x is None:
             cp1_x = self.data['cp1']['proc_x']
@@ -93,10 +94,16 @@ class CCAProcessor:
             num_components = preset_num_components
             self.num_components = num_components
 
-        pca_cp1 = PCA(n_components = num_components)
+        if day_0_transformer is None:
+            pca_cp1 = PCA(n_components = num_components)
+        else:
+            pca_cp1 = day_0_transformer
         pca_cp2 = PCA(n_components = num_components)
-
-        self.data['cp1']['pca_x'] = pca_cp1.fit_transform(cp1_x)
+        
+        if day_0_transformer is None:
+            self.data['cp1']['pca_x'] = pca_cp1.fit_transform(cp1_x)
+        else:
+            self.data['cp1']['pca_x'] = pca_cp1.transform(cp1_x)
         self.data['cp2']['pca_x'] = pca_cp2.fit_transform(cp2_x)
 
         self.data['cp1']['pca_transformer'] = pca_cp1
@@ -162,9 +169,9 @@ class CCAProcessor:
         self.cca = cca_cp1cp2
         self.x2_cca = x2_cca
 
-        for i in range(3):
-            corr = np.around(np.corrcoef(x1_cca[:, i], x2_cca[:, i])[0,1], 2)
-            print(f'dim{i} corr is {corr}')
+       # for i in range(3):
+       #     corr = np.around(np.corrcoef(x1_cca[:, i], x2_cca[:, i])[0,1], 2)
+       #     print(f'dim{i} corr is {corr}')
         x2_into_x1 = cca_cp1cp2.inverse_transform(x2_cca)
 
         return cca_cp1cp2, x2_into_x1
@@ -372,8 +379,11 @@ class CCAProcessor:
     def quick_cca(self, x, transformer, scale=True):
         nada, temp=transformer.transform(x,x)
         temp2 = transformer.inverse_transform(temp)
-        scaler = StandardScaler()
-        return scaler.fit_transform(temp2)
+        if scale:
+            scaler = StandardScaler()
+            return scaler.fit_transform(temp2)
+        else:
+            return temp2
 
     def apply_pinv_transform(self, x = None, y=None, decoder=None):
         if decoder is None:
@@ -404,17 +414,19 @@ class CCAProcessor:
             return
         else:
             i=0
-            for idx, channel in enumerate(cp1_channels):
-                if channel in cp2_channels:
+            for idx, channel in enumerate(cp2_channels):
+                print(f'this is index:{idx}, and channel#:{channel}')
+                if channel in cp1_channels:
                     new_cp2_rates[:, i] = self.cp2.data['rates'][0][:, idx] 
+                    print(f'idx={idx}, i={i}')
+                    i=i+1
+                else:
+                    print(f'removing channel {channel} from cp2')
 
-                i=i+1
 
         return new_cp2_rates
 
 
 
         
-
-
 
