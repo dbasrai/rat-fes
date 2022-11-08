@@ -407,7 +407,6 @@ class CortProcessor:
         for angle in Y_:
             if angle.ndim > 1:
                 angle = angle[:, angle_number]
-            print(angle.shape)
             temp_peaks, nada = find_peaks(angle, prominence=10, distance=5)
             avg_ = np.average(angle[temp_peaks])
             std_ = np.std(angle[temp_peaks])
