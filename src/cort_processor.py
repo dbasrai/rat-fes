@@ -359,6 +359,14 @@ class CortProcessor:
         if H == 'sin':
             H_mat = self.h_sin
         return H_mat
+    
+    def impulse_response(self, AOI, H = None, plotting = True):
+        phase_list = self.phase_list
+        if H == None:
+            H = 'sin'
+        h_mat = self.get_H(H)
+        response = impulse_response(AOI, h_mat, phase_list, plotting)
+        return response
         
     def get_gait_indices(self, Y=None):
         '''

@@ -52,55 +52,62 @@ def tailored_peaks(angles, index):
     peak_dict = {
             0 : {
                 'signal': -(angles[:,index]),
-                'prominence': 5,
-                'distance': 5,
-                'width' : 2,
-                'height' : -1.2*np.mean(angles[:,index])
+                'window': 60,
+                'prominence': 10,
+                'distance': 6,
+                'height' : -np.mean(angles[:,index])
             },
             1 : {
                 'signal': angles[:,index],
+                'window': 60,
                 'prominence': 10,
                 'distance': None,
-                'width' : None,
                 'height' : np.mean(angles[:,index])
             },
             2 : {
                 'signal': angles[:,index],
-                'prominence': 5,
-                'distance': None,
-                'width' : 2,
-                'height' : np.mean(angles[:,index])
+                'window': 60,
+                'prominence': 3,
+                'distance': 5,
+                'height' : None
             },
             3 : {
                 'signal': angles[:,index],
+                'window': 60,
                 'prominence': 10,
                 'distance': None,
-                'width' : None,
                 'height' : np.mean(angles[:,index])
             },
             4 : {
+                'signal': -(angles[:,index]),
+                'window': 60,
+                'prominence': 10,
+                'distance': 6,
+                'height' : -np.mean(angles[:,index])
+                },
+            5 : {
                 'signal': angles[:,index],
+                'window': 60,
                 'prominence': 6.5,
                 'distance': 5,
-                'width' : None,
-                'height' : 1.1*np.mean(angles[:,index])
-            },
-            5 : {
-                'signal': -(angles[:,index]),
-                'prominence': 5,
-                'distance': None,
-                'width' : None,
-                'height' : -1.1*np.mean(angles[:,index])
+                'height' : None
             },
             6 : {
+                'signal': -(angles[:,index]),
+                'window': 60,
+                'prominence': 5,
+                'distance': None,
+                'height' : -1.1*np.mean(angles[:,index])
+            },
+            7 : {
                 'signal': angles[:,index],
+                'window': 60,
                 'prominence': 9,
                 'distance': 5,
-                'width' : None,
                 'height' : None
             }
         }
-    peaks, _ = spicy.signal.find_peaks(peak_dict[index]['signal'], prominence=peak_dict[index]['prominence'], distance =peak_dict[index]['distance'], width=peak_dict[index]['width'], height =peak_dict[index]['height'])    
+    peaks, _ = spicy.signal.find_peaks(peak_dict[index]['signal'], wlen = peak_dict[index]['window'], prominence=peak_dict[index]['prominence'], distance =peak_dict[index]['distance'], height =peak_dict[index]['height'])    
     peaks = np.concatenate([[0],peaks,[np.shape(angles[:,index])[0]-1]])
     return peaks
 
@@ -130,7 +137,7 @@ def best_hindlimb_match(phase_list, roll, AOI):
     best_index = max(range(len(rank_list)), key=rank_list.__getitem__)+4
     return best_index
 
-def impulse_response(H_mat, AOI, phase_list, plotting = False):
+def impulse_response(AOI, H_mat, phase_list, plotting = False):
     column_response = []
     for i in range(0,32):
             product_list = []
