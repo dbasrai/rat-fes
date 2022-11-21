@@ -273,7 +273,8 @@ class CortProcessor:
 
 
 
-    def stitch_and_format(self, firing_rates_list, resampled_angles_list):
+    def stitch_and_format(self, firing_rates_list=None,
+            resampled_angles_list=None):
         """
         takes list of rates, list of angles, then converts them into lags of 10
         using format rate in wiener_filter.py, and then stitches them into one
@@ -282,6 +283,10 @@ class CortProcessor:
         both lists must have same # of elements, and each array inside list
         must have the same size as the corresponding array in the other list.
         """
+        if firing_rates_list is None:
+            firing_rates_list = self.data['rates']
+        if resampled_angles_list is None:
+            resampled_angles_list = self.data['angles']
         assert isinstance(firing_rates_list, list), 'rates must be list'
         assert isinstance(resampled_angles_list, list), 'angles must be list'
         formatted_rates = []

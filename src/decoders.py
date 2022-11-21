@@ -92,7 +92,7 @@ def ridge_fit(b0, x_format, y_format, my_alpha=100.0, angle=1):
 
     ywpost = test_wiener_filter(x_format, wpost)
     new_vaf = vaf(y_format[:,angle], ywpost[:,angle])
-   # print(f'new_scoring is: {new_vaf}')
+    print(f'new_scoring is: {new_vaf}')
 
     return wpost, ywpost
 
