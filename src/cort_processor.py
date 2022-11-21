@@ -4,10 +4,12 @@ import gc
 
 from src.neural_analysis import *
 from src.wiener_filter import *
+from src.filters import *
 from src.folder_handler import *
 from src.tdt_support import *
 from src.decoders import *
-
+from src.phase_decoder_support import *
+from sklearn.metrics import r2_score
 from scipy.signal import resample, find_peaks
 from sklearn.decomposition import PCA
 import scipy.io as sio
@@ -20,6 +22,8 @@ class CortProcessor:
     upon initialization, extracts data from TDT and anipose file
     see cort_processor.md in 'docs' for more information
     '''
+    
+    
     def __init__(self, folder_path):
         if os.path.isdir(folder_path):
             #see docs/data_folder_layout.md for how to structure folder_path
@@ -134,7 +138,7 @@ class CortProcessor:
 
         return tdt_data_list, kin_data_list
 
-    def process(self, manual_crop_list=None, threshold_multiplier = 3.0, binsize = 0.05):
+    def process(self, manual_crop_list=None, threshold_multiplier = -3.0, binsize = 0.05):
         """
         1) takes raw neural data, then bandpass+notch filters, then extracts
         spikes using threshold_multiplier, then bins into firing rates with bin
@@ -173,12 +177,22 @@ class CortProcessor:
             neural = self.tdt_data[i]['neural'] #quick accessible variable
             
             #notch and bandpass filter
-            filtered_neural = filter_neural(neural, fs)
+            
+            ##common mode rejection assumes equal impedence and is therefore not recommended 
+            # means = np.mean(neural, axis = 1)
+            # commonmode = []
+            # for j in range(neural.shape[1]):
+            #     commonhold = neural[:,j] - means
+            #     commonmode.append(commonhold)
+            # commonmode = np.array(commonmode).T
+            
+            filtered_neural = fresh_filt(neural, 350, 8000, fs, order = 4)
             clean_filtered_neural = remove_artifacts(filtered_neural, fs)
 
-            #extract spike and bin
-            spikes = autothreshold_crossings(clean_filtered_neural,
+            #extract spike, impose refeactory limit (post artifact rejection) and bin
+            spikes_tmp = threshold_crossings_refrac(clean_filtered_neural,
                     threshold_multiplier)
+            spikes = refractory_limit(spikes_tmp, fs)
             firing_rates = spike_binner(spikes, fs, binsize)
             
             self.data['rates'].append(firing_rates)
@@ -273,6 +287,7 @@ class CortProcessor:
 
 
 
+<<<<<<< HEAD
     def stitch_and_format(self, firing_rates_list=None,
             resampled_angles_list=None):
         """
@@ -283,10 +298,11 @@ class CortProcessor:
         both lists must have same # of elements, and each array inside list
         must have the same size as the corresponding array in the other list.
         """
-        if firing_rates_list is None:
+        if firing_rates_list == None and resampled_angles_list == None:
             firing_rates_list = self.data['rates']
-        if resampled_angles_list is None:
             resampled_angles_list = self.data['angles']
+        
+        
         assert isinstance(firing_rates_list, list), 'rates must be list'
         assert isinstance(resampled_angles_list, list), 'angles must be list'
         formatted_rates = []
@@ -310,6 +326,7 @@ class CortProcessor:
             kin = np.vstack(formatted_angles)
         else:
             kin = np.hstack(formatted_angles)
+        
         return np.squeeze(rates), np.squeeze(kin)
 
     def stitch_data(self, firing_rates_list, resampled_angles_list):
@@ -365,10 +382,17 @@ class CortProcessor:
                 X = self.apply_scaler(X)
             X, Y = self.stitch_and_format(X,Y)
 
+<<<<<<< HEAD
             h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y,
                     metric=metric)
             
    
+=======
+            else:
+                X, Y = self.stitch_and_format(X, Y)
+            h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y)
+            self.h_angle = h_angle
+>>>>>>> main
             return h_angle, vaf_array, final_test_x, final_test_y
         except Exception as e:
             print(e)
@@ -384,10 +408,59 @@ class CortProcessor:
             X,Y = self.stitch_and_format(self.data['rates'],
                     self.data['toe_height'])
             h_toe, vaf_array, final_test_x, final_test_y = decode_kfolds_single(X, Y)
+            self.h_toe = h_toe
             return h_toe, vaf_array, final_test_x, final_test_y
         except:
             print('did you run process_toe_height() yet?????')
+            
+    def decode_phase(self, rates=None, angles=None):
+        if rates is None and angles is None:
+            full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
+                        self.data['angles'])
 
+        else:
+            full_rates, full_angles = self.stitch_and_format(rates, angles)
+        phase_list = []
+        for i in range(full_angles.shape[1]):
+            peak_list = tailored_peaks(full_angles, i)
+            phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
+            phase_list.append(phase_list_tmp)
+        phase_list = np.array(phase_list).T
+        sin_array, cos_array = sine_and_cosine(phase_list)
+        h_sin, _, _, _ = decode_kfolds(X=full_rates, Y=sin_array)
+        h_cos, _, _, _ = decode_kfolds(X=full_rates, Y=cos_array)
+        predicted_sin = predicted_lines(full_rates, h_sin)
+        predicted_cos = predicted_lines(full_rates, h_cos)
+        arctans = arctan_fn(predicted_sin, predicted_cos)
+        r2_array = []
+        for i in range(sin_array.shape[1]):
+            r2_sin = r2_score(sin_array[:,i], predicted_sin[:,i])
+            r2_cos = r2_score(cos_array[:,i], predicted_cos[:,i])
+            r2_array.append(np.mean((r2_sin,r2_cos)))
+        self.phase_list = phase_list
+        self.h_sin = h_sin
+        self.h_cos = h_cos
+        return arctans, phase_list, r2_array
+    
+    def get_H(self, H):
+        if H == 'toe':
+            H_mat = self.h_toe
+        if H == 'angle':
+            H_mat = self.h_angle
+        if H == 'cos':
+            H_mat = self.h_cos
+        if H == 'sin':
+            H_mat = self.h_sin
+        return H_mat
+    
+    def impulse_response(self, AOI, H = None, plotting = True):
+        phase_list = self.phase_list
+        if H == None:
+            H = 'sin'
+        h_mat = self.get_H(H)
+        response = impulse_response(AOI, h_mat, phase_list, plotting)
+        return response
+        
     def get_gait_indices(self, Y=None, angle_number=3):
         '''
         This takes a kinematic variable, and returns indices where each peak is
@@ -677,3 +750,22 @@ class CortProcessor:
         print(f'video_time is: {video_time}')
 
         return frame
+    
+    def predicted_lines_malleable(self, h_sin, h_cos):
+        try:  
+            full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
+                            self.data['angles'])
+            phase_list = self.phase_list
+            sin_array, cos_array = sine_and_cosine(phase_list)
+            predicted_sin = predicted_lines(full_rates, h_sin)
+            predicted_cos = predicted_lines(full_rates, h_cos)
+            arctans = arctan_fn(predicted_sin, predicted_cos)
+            r2_array = []
+            for i in range(sin_array.shape[1]):
+                r2_sin = r2_score(sin_array[:,i], predicted_sin[:,i])
+                r2_cos = r2_score(cos_array[:,i], predicted_cos[:,i])
+                r2_array.append(np.mean((r2_sin,r2_cos)))
+            return arctans, phase_list, r2_array
+        except:
+            print('error lol')
+            print('Feed in sin and cos H matricies from another session to test gernealizability')
