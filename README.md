@@ -2,6 +2,15 @@
 
 for how to format data, see data_folder_layout.md in 'docs'
 
-Ddsf_sdfasdfsad_dsfasdfasd ffor description of all coding files and what they do, see src_files.md in 'docs' 
+for description of all coding files and what they do, see src_files.md in 'docs' 
 
-IWWWWW
+## folder description
+
+dailies = diyas journal
+docs = docs
+notebooks = jupyter notebooks
+results = figs
+scripts = .py scripts
+src = .py src code
+tests = nothing for now i think
+
