@@ -329,7 +329,7 @@ class CortProcessor:
             full_rates, full_angles = self.stitch_and_format(rates, angles)
         phase_list = []
         for i in range(full_angles.shape[1]):
-            peak_list = tailored_peaks(full_angles, i)
+            peak_list = tailored_peaks(full_angles, i, self.data['angle_names'][i])
             phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
             phase_list.append(phase_list_tmp)
         phase_list = np.array(phase_list).T

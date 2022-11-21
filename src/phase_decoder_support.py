@@ -48,66 +48,73 @@ def to_phasex(peaks, angles):
         angles[-1] = 0
     return angles
 
-def tailored_peaks(angles, index):
+def tailored_peaks(angles, index, name):
     peak_dict = {
-            0 : {
+            'foot' : {
                 'signal': -(angles[:,index]),
                 'window': 60,
                 'prominence': 10,
                 'distance': 6,
                 'height' : -np.mean(angles[:,index])
             },
-            1 : {
+            'knee' : {
                 'signal': angles[:,index],
                 'window': 60,
                 'prominence': 10,
                 'distance': None,
                 'height' : np.mean(angles[:,index])
             },
-            2 : {
+            'hip' : {
                 'signal': angles[:,index],
                 'window': 60,
                 'prominence': 3,
                 'distance': 5,
                 'height' : None
             },
-            3 : {
+            'limbfoot' : {
                 'signal': angles[:,index],
                 'window': 60,
                 'prominence': 10,
                 'distance': None,
                 'height' : np.mean(angles[:,index])
             },
-            4 : {
+            'hand' : {
                 'signal': -(angles[:,index]),
                 'window': 60,
                 'prominence': 10,
                 'distance': 6,
                 'height' : -np.mean(angles[:,index])
                 },
-            5 : {
+            'elbow' : {
                 'signal': angles[:,index],
                 'window': 60,
                 'prominence': 6.5,
                 'distance': 5,
                 'height' : None
             },
-            6 : {
+            'shoulder' : {
                 'signal': -(angles[:,index]),
                 'window': 60,
                 'prominence': 5,
                 'distance': None,
                 'height' : -1.1*np.mean(angles[:,index])
             },
-            7 : {
+            'forelimb' : {
                 'signal': angles[:,index],
                 'window': 60,
                 'prominence': 9,
                 'distance': 5,
                 'height' : None
+            },
+            'ankle' : {
+                    'signal': -(angles[:,index]),
+                    'window': 60,
+                    'prominence': 10,
+                    'distance': 6,
+                    'height' : -np.mean(angles[:,index])
             }
         }
-    peaks, _ = spicy.signal.find_peaks(peak_dict[index]['signal'], wlen = peak_dict[index]['window'], prominence=peak_dict[index]['prominence'], distance =peak_dict[index]['distance'], height =peak_dict[index]['height'])    
+    peaks, _ = spicy.signal.find_peaks(peak_dict[name]['signal'], wlen = peak_dict[name]['window'], prominence=peak_dict[name]['prominence'], distance =peak_dict[name]['distance'], height =peak_dict[name]['height'])    
     peaks = np.concatenate([[0],peaks,[np.shape(angles[:,index])[0]-1]])
     return peaks
 
