@@ -287,7 +287,6 @@ class CortProcessor:
 
 
 
-<<<<<<< HEAD
     def stitch_and_format(self, firing_rates_list=None,
             resampled_angles_list=None):
         """
@@ -382,17 +381,10 @@ class CortProcessor:
                 X = self.apply_scaler(X)
             X, Y = self.stitch_and_format(X,Y)
 
-<<<<<<< HEAD
             h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y,
                     metric=metric)
             
-   
-=======
-            else:
-                X, Y = self.stitch_and_format(X, Y)
-            h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y)
             self.h_angle = h_angle
->>>>>>> main
             return h_angle, vaf_array, final_test_x, final_test_y
         except Exception as e:
             print(e)
