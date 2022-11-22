@@ -69,8 +69,35 @@ def decode_kfolds_single(X, Y, k=10):
 
 #    return X_pca_output, pca_output
 
+def classify_kfolds(X, Y, k=10):
+    #Y should be 0s or 1s I believe
+    kf = KFold(n_splits=k)
 
-def ridge_fit(b0, x_format, y_format, my_alpha=100.0, angle=1):
+    accuracy_list = []
+    best_accuracy=0
+    clf = make_pipeline(StandardScaler(), SGDClassifier(max_iter=10000,
+       tol=1e-3))
+    best_model = clf
+    for train_index, test_index in kf.split(rates):
+
+
+        train_x, test_x = rates[train_index, :], rates[test_index,:]
+        train_y, test_y = stance_swing[train_index], stance_swing[test_index]
+
+        clf.fit(train_x, train_y)
+        y_pred = clf.predict(test_x)
+        pred_accuracy = accuracy_score(test_y, y_pred)
+        accuracy_list.append(pred_accuracy)
+        if best_accuracy < pred_accuracy:
+            best_accuracy = pred_accuracy
+            best_model = clf
+            final_test_x = test_x
+            final_test_y = test_y
+    
+    return best_model, accuracy_list, final_test_x, final_test_y
+
+
+def ridge_fit(b0, x_format, y_format, my_alpha=100.0, angle_number=1):
     #b0 = day0 decoder weights
     #x = dayk x values (usually PCA) (FORMATTED)
     #y = dayk y values (FORMATTED)
@@ -91,7 +118,7 @@ def ridge_fit(b0, x_format, y_format, my_alpha=100.0, angle=1):
     wpost = b + b0
 
     ywpost = test_wiener_filter(x_format, wpost)
-    new_vaf = vaf(y_format[:,angle], ywpost[:,angle])
+    new_vaf = vaf(y_format[:,angle_number], ywpost[:,angle_number])
     print(f'new_scoring is: {new_vaf}')
 
     return wpost, ywpost

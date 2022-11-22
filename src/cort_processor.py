@@ -21,9 +21,7 @@ class CortProcessor:
     class that can handle neural + kinematic/EMG data simultaneously
     upon initialization, extracts data from TDT and anipose file
     see cort_processor.md in 'docs' for more information
-    '''
-    
-    
+    '''    
     def __init__(self, folder_path):
         if os.path.isdir(folder_path):
             #see docs/data_folder_layout.md for how to structure folder_path
@@ -217,7 +215,7 @@ class CortProcessor:
         #returning stitched rates --- we don't directly use this for anything.     
         return np.vstack(self.data['rates']), np.vstack(self.data['angles'])
 
-    def process_toe_height(self, toe_num=0):
+    def process_toe_height(self):
         """
         extracts toe height from data['coords'], then scales such that lowest
         toe height is 0.
@@ -226,6 +224,7 @@ class CortProcessor:
         bodypart 0
         """
         try:
+            toe_num = self.bodypart_helper('toe')
             temp_list = []
             self.data['toe_height'] = []
             minimum_toe = 1000 #arbitrary high number to be beat
@@ -362,7 +361,7 @@ class CortProcessor:
         return new_x, new_y
         
 
-    def decode_angles(self, X=None, Y=None, metric=3, scale=False):
+    def decode_angles(self, X=None, Y=None, metric_angle='limbfoot', scale=False):
         """
         takes list of rates, angles, then using a wiener filter to decode. 
         if no parameters are passed, uses data['rates'] and data['angles']
@@ -380,6 +379,8 @@ class CortProcessor:
             if scale is True:
                 X = self.apply_scaler(X)
             X, Y = self.stitch_and_format(X,Y)
+
+            metric = self.angle_name_helper(metric_angle)
 
             h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y,
                     metric=metric)
@@ -452,8 +453,44 @@ class CortProcessor:
         h_mat = self.get_H(H)
         response = impulse_response(AOI, h_mat, phase_list, plotting)
         return response
+
+    def get_gait_indices(self, Y=None, metric_angle='limbfoot'):
+        if Y is None:
+            Y_ = self.data['angles']
+        else:
+            assert isinstance(Y, list), 'Y must be a list'
+
+        gait_indices = []
+        samples_list = []
+
+        angle_number = self.angle_name_helper(metric_angle)
+
+        for angle in Y_:
+            peaks= tailored_peaks(angle, angle_number,metric_angle)
+
+            gait_indices.append(peaks)
+            samples_list.append(np.diff(peaks))
+
+        if len(samples_list)>1:
+            samples = np.concatenate(samples_list)
+        else:
+            samples = sample_list[0]
+	
+        avg_gait_samples = int(np.round(np.average(samples)))
         
-    def get_gait_indices(self, Y=None, angle_number=3):
+        if Y is None:
+            self.gait_indices = gait_indices
+            self.avg_gait_samples = avg_gait_samples
+
+        print(avg_gait_samples)
+        print(len(gait_indices))
+
+        return gait_indices, avg_gait_samples		
+			 
+        
+
+        
+    def deprec_get_gait_indices(self, Y=None, metric_angle='limbfoot'):
         '''
         This takes a kinematic variable, and returns indices where each peak is
         found. It also returns the average number of samples between each
@@ -471,6 +508,8 @@ class CortProcessor:
         else:
             assert isinstance(Y, list), 'Y must be a list'
             Y_=Y
+
+        angle_number = self.angle_name_helper(metric_angle)
 
         gait_indices = []
         samples_list = []
@@ -573,6 +612,53 @@ class CortProcessor:
             self.angles_gait = Y_gait 
 
         return X_gait, Y_gait #return list of list of lists lol
+
+    def toe_to_stance_swing(self, toe_height):
+        peaks, _ = find_peaks(toe_height, height=12)
+        peaks = np.append(peaks, np.size(toe_height))
+        peaks = np.insert(peaks, 0, 0)
+        ss_list = []
+
+        for i in range(np.size(peaks)-1):
+            end=peaks[i+1]
+            start=peaks[i]
+
+            gait = toe_height[start:end]
+            dx = np.gradient(gait)
+            ddx = np.gradient(dx)
+
+            ddx_peaks, _ = find_peaks(ddx, height=0.02)
+            if np.size(ddx_peaks) == 2:
+                ss = np.ones(np.size(gait), dtype=bool)
+                ss[ddx_peaks[0]:ddx_peaks[1]] = 0
+            else:
+                minny = np.amin(gait)
+                ss = gait>minny+2
+
+            ss_list.append(ss)
+
+        stance_swing = np.hstack(ss_list)
+        return stance_swing
+
+
+
+    def get_stance_swing(self):
+        if self.data['toe_height'] is None:
+            output = 'run process toe height first'
+
+        toe_list = self.data['toe_height']
+        stance_swing_list = []
+
+        for toe in toe_list:
+            stance_swing_list.append(self.toe_to_stance_swing(toe))
+
+
+        rates = self.data['rates']
+
+        X, Y = self.stitch_and_format(rates, stance_swing_list)
+        return X, Y
+
+
 
     def remove_bad_gaits(self, X=None, Y=None, gait_indices=None,
             avg_gait_samples = None, bool_resample=True):
@@ -761,3 +847,9 @@ class CortProcessor:
         except:
             print('error lol')
             print('Feed in sin and cos H matricies from another session to test gernealizability')
+
+    def angle_name_helper(self, angle_name):
+        return self.data['angle_names'].index(angle_name)
+
+    def bodypart_helper(self, bodypart):
+        return self.data['bodyparts'].index(bodypart)

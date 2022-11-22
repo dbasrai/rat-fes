@@ -9,15 +9,18 @@ from sklearn.cross_decomposition import CCA
 from sklearn.preprocessing import StandardScaler
 
 class CCAProcessor:
-    def __init__(self, cp1, cp2, limbfoot_angle=1, align=0):
+    def __init__(self, cp1, cp2, metric_angle='limbfoot', align=0):
         #align = 0 is sorting and stitching
         #align = 1 is resampling
         self.cp1 = cp1
-        self.cp1.get_gait_indices(angle_number=limbfoot_angle)
+        #angle_number1 = cp1.angle_name_helper(metric_angle)
+        self.cp1.get_gait_indices(metric_angle=metric_angle)
         
         self.cp2 = cp2
-        self.cp2.get_gait_indices(angle_number=limbfoot_angle)
-        self.limbfoot_angle=limbfoot_angle
+        ##angle_number2 = cp2.angle_name_helper(metric_angle)
+        self.cp2.get_gait_indices(metric_angle=metric_angle)
+
+        self.metric_angle=metric_angle
         
         self.data = {}
         self.data['cp1'] = {}
@@ -55,11 +58,16 @@ class CCAProcessor:
         print(self.data['cp2']['proc_y'].shape)
 
 
-    def get_better_decoder(self, limbfoot_angle=1):
+    def get_better_decoder(self, metric_angle=None):
+        if metric_angle is None:
+            metric_angle = self.cp1.metric_angle
+        
+        angle_number = self.cp1.angle_name_helper(metric_angle)
+
         nada, vaf1, nada, nada = self.cp1.decode_angles()
         nada, vaf2, nada, nada = self.cp2.decode_angles()
 
-        if np.average(vaf1,1)[limbfoot_angle] >= np.average(vaf2, 1)[limbfoot_angle]:
+        if np.average(vaf1,1)[angle_number] >= np.average(vaf2, 1)[angle_number]:
             print('cp1 is better')
         else:
             print('cp2 is better')
@@ -309,7 +317,7 @@ class CCAProcessor:
  
         return new_array[0], new_array[1], new_array[2], new_array[3]
 
-    def apply_ridge(self, reduce_dims=False, dims=None, angle=3):
+    def apply_ridge(self, reduce_dims=False, dims=None, metric_angle=None):
         if reduce_dims:
             if self.data['cp1']['pca_x'] is not None:
                 x1 = self.data['cp1']['pca_x']
@@ -319,7 +327,12 @@ class CCAProcessor:
         else:
             x1 = self.data['cp1']['proc_x']
             x2 = self.data['cp2']['proc_x']
-        
+
+        if metric_angle is None:
+            metric_angle = self.metric_angle
+            
+        angle_number = self.cp2.angle_name_helper(metric_angle)
+
         y1 = self.data['cp1']['proc_y']
         y2 = self.data['cp2']['proc_y']
 
@@ -341,11 +354,13 @@ class CCAProcessor:
                 y2_full)
 
         wpost, ywpost = ridge_fit(b0, x2_scca_format, y2_format, my_alpha=100,
-                angle=angle)
+                angle_number=angle_number)
 
         return transformer, wpost, ywpost
     
     def apply_ridge_only_proc(self, reduce_dims=False, dims=None, angle=6):
+        '''deprecated I believe'''
+
         if reduce_dims:
             if self.data['cp1']['pca_x'] is not None:
                 x1 = self.data['cp1']['pca_x']

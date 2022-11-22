@@ -127,6 +127,7 @@ def stance_swing_dd(toe_height):
     peaks = np.append(peaks, np.size(toe_height))
     peaks = np.insert(peaks, 0, 0)
     ss_list = []
+    print(toe_height.shape)
 
     for i in range(np.size(peaks)-1):
         end=peaks[i+1]
