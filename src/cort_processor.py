@@ -282,6 +282,33 @@ class CortProcessor:
         kin = np.vstack(resampled_angles_list)
 
         return rates, kin
+   
+    def spectro1(self, window=4, plotting = False):
+        '''
+        this makes spectrograms! 
+        '''
+        rate_append =[]
+        for i in range(len(self.data['rates'])):
+            rate_append.append(self.data['rates'][i])
+        rates = np.vstack(rate_append)
+        seconds = window
+        fsr = 20
+        tlim = (rates.shape[0]*50)/1000
+        nperseg_rates = int(seconds*fsr)
+        Sxx_list = []
+        for i in range(0,32):
+            f, t, Sxx = signal.spectrogram(rates[:,i], fs = fsr, nperseg = nperseg_rates)
+            Sxx_list.append(Sxx)
+        Sxx_sum = np.sum(Sxx_list, axis=0)
+        if plotting == True:
+            fig, (ax2) = plt.subplots(1, 1, figsize=(10,6))
+            ax2.pcolormesh(t, f, Sxx_sum, cmap = 'terrain', shading='gouraud')
+            ax2.set_ylim([0,10])
+            # ax2.set_xlim([0,tlim])
+            ax2.set_ylabel('Frequency [Hz]')
+            ax2.set_xlabel('Time [sec]')
+            ax2.set_title('spike rate spectrogram')
+        return Sxx_sum
 
     def decode_angles(self, X=None, Y=None):
         """
