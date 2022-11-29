@@ -164,8 +164,10 @@ def pinv_fit(b0, x_format, y_format, angle=1):
     clf = LinearRegression()
     clf.fit(x_format, y_star)
 
-    return clf
+    trans_x_format = clf.predict(x_format)
+    pinv_predic = np.dot(trans_x_format, b0_no_offset)+offset
 
+    return clf, pinv_predic
 
 
 

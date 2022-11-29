@@ -391,6 +391,8 @@ class CortProcessor:
             print(e)
             print('did you run process() first.')
 
+    
+
     def decode_toe_height(self):
         '''
         a PIPELINE code, which you can you only after you run
@@ -433,7 +435,7 @@ class CortProcessor:
         self.phase_list = phase_list
         self.h_sin = h_sin
         self.h_cos = h_cos
-        return arctans, phase_list, r2_array
+        return arctans, phase_list, sin_array, cos_array, r2_array
     
     def get_H(self, H):
         if H == 'toe':
@@ -482,8 +484,6 @@ class CortProcessor:
             self.gait_indices = gait_indices
             self.avg_gait_samples = avg_gait_samples
 
-        print(avg_gait_samples)
-        print(len(gait_indices))
 
         return gait_indices, avg_gait_samples		
 			 
@@ -709,8 +709,8 @@ class CortProcessor:
         proc_rates = []
         proc_angles = []
         for i, trial_indices in enumerate(gait_indices):
-            trial_rate_gait = []
-            trial_angle_gait = []
+            #trial_rate_gait = []
+            #trial_angle_gait = []
             for j in range(np.size(trial_indices)-1):
                 if j in bads_list[i]:
                     #skip if its a bad gait cycle!
@@ -721,15 +721,19 @@ class CortProcessor:
 
                     temp_rate = rates[i][start:end,:]
                     temp_angle = angles[i][start:end,:]
+
+                    #low_number_check = temp_angle[:,6] > 100
+                    #if False in low_number_check:
+                    #    continue
                     if bool_resample:
                         temp_rate = resample(temp_rate, avg_gait_samples, axis=0)
                         temp_angle = resample(temp_angle, avg_gait_samples, axis=0)
-                    trial_rate_gait.append(temp_rate)
-                    trial_angle_gait.append(temp_angle)
+                    proc_rates.append(temp_rate)
+                    proc_angles.append(temp_angle)
  
-            proc_rates.append(trial_rate_gait)
-            proc_angles.append(trial_angle_gait)
-
+            #proc_rates.append(trial_rate_gait)
+            #proc_angles.append(trial_angle_gait)
+        
         return np.vstack(proc_rates), np.vstack(proc_angles)
                 
  

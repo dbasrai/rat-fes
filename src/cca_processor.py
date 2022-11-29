@@ -317,7 +317,45 @@ class CCAProcessor:
  
         return new_array[0], new_array[1], new_array[2], new_array[3]
 
-    def apply_ridge(self, reduce_dims=False, dims=None, metric_angle=None):
+    def new_apply_ridge(self, x1=None, y1=None, x2=None, y2=None,
+            metric_angle=None, decoder=None, my_alpha=100):
+        if x1 is None:
+            x1 = self.data['cp1']['proc_x']
+        if y1 is None:
+            y1 = self.data['cp1']['proc_y']
+        if x2 is None:
+            x2 = self.data['cp2']['proc_x']
+        if y2 is None:
+            y2 = self.data['cp2']['proc_y']
+        if metric_angle is None:
+            metric_angle = self.metric_angle
+            
+        angle_number = self.cp2.angle_name_helper(metric_angle)
+
+        if decoder is None: 
+            b0, nada, nada, nada = self.cp1.decode_angles(scale=False) 
+        else:
+            b0 = decoder
+        transformer, nada = self.apply_CCA(cp1_x = x1, cp2_x = x2)
+
+        #x2_full = self.cp2.data['rates']
+        #y2_full = self.cp2.data['angles']
+        #x2_transform_full = []
+        #for x in x2_full:
+        #    x2_transform_full.append(self.quick_cca(x, transformer))
+
+        #x2_scca_format, y2_format = self.cp2.stitch_and_format(x2_transform_full,
+        #        y2_full)
+
+        x2_format, y2_format = format_data(x2, self.data['cp2']['proc_y'])
+        #testing
+        wpost, ywpost = ridge_fit(b0, x2_format, y2_format, my_alpha=my_alpha,
+                angle_number=angle_number)
+
+        return transformer, wpost, ywpost
+  
+    def old_apply_ridge(self, reduce_dims=False, dims=None, metric_angle=None,
+            decoder=None, phase=True):
         if reduce_dims:
             if self.data['cp1']['pca_x'] is not None:
                 x1 = self.data['cp1']['pca_x']
@@ -336,12 +374,14 @@ class CCAProcessor:
         y1 = self.data['cp1']['proc_y']
         y2 = self.data['cp2']['proc_y']
 
-        
-        if reduce_dims:
-            temp_x_pca = self.cp1.apply_PCA(dims = x1.shape[1])
-            b0, nada, nada, nada = self.cp1.decode_angles(X=temp_x_pca)
+        if decoder is None: 
+            if reduce_dims:
+                temp_x_pca = self.cp1.apply_PCA(dims = x1.shape[1])
+                b0, nada, nada, nada = self.cp1.decode_angles(X=temp_x_pca)
+            else:
+                b0, nada, nada, nada = self.cp1.decode_angles(scale=True) 
         else:
-            b0, nada, nada, nada = self.cp1.decode_angles(scale=True) 
+            b0 = decoder
         transformer, nada = self.apply_CCA(cp1_x = x1, cp2_x = x2)
 
         x2_full = self.cp2.data['rates']
@@ -412,9 +452,9 @@ class CCAProcessor:
             x_format, y_format = self.cp2.stitch_and_format(x, y)
         else:
             x_format, y_format = format_data(x, y)
-        clf = pinv_fit(decoder, x_format, y_format)
+        clf, predic = pinv_fit(decoder, x_format, y_format)
 
-        return clf
+        return clf, predic
 
     def remove_cp2_channels(self):
         samples = self.cp2.data['rates'][0].shape[0]
