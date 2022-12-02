@@ -407,35 +407,49 @@ class CortProcessor:
             return h_toe, vaf_array, final_test_x, final_test_y
         except:
             print('did you run process_toe_height() yet?????')
-            
-    def decode_phase(self, rates=None, angles=None):
+
+    def decode_phase(self, rates=None, angles=None, metric_angle='limbfoot'):
         if rates is None and angles is None:
             full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
                         self.data['angles'])
 
-        else:
+        elif isinstance(rates, list):
             full_rates, full_angles = self.stitch_and_format(rates, angles)
+        else:
+            full_rates = rates
+            full_angles = angles
+        
+        angle_number = self.angle_name_helper(metric_angle)
         phase_list = []
+        
         for i in range(full_angles.shape[1]):
             peak_list = tailored_peaks(full_angles, i, self.data['angle_names'][i])
             phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
             phase_list.append(phase_list_tmp)
         phase_list = np.array(phase_list).T
         sin_array, cos_array = sine_and_cosine(phase_list)
-        h_sin, _, _, _ = decode_kfolds(X=full_rates, Y=sin_array)
-        h_cos, _, _, _ = decode_kfolds(X=full_rates, Y=cos_array)
+        h_sin, vaf_sin, test_sinx, test_siny = decode_kfolds(X=full_rates, Y=sin_array,
+                metric=angle_number, vaf_scoring=False)
+        h_cos, vaf_cos, test_cosx, test_cosy = decode_kfolds(X=full_rates, Y=cos_array,
+                metric=angle_number, vaf_scoring=False)
         predicted_sin = predicted_lines(full_rates, h_sin)
         predicted_cos = predicted_lines(full_rates, h_cos)
+        
+       # test_sin = predicted_lines(test_sinx, h_sin)
+        #test_cos = predicted_lines(test_cosx, h_cos)
+        #test_predic_arctans = arctan_fn(test_sin, test_cos)
+        #test_real_arctans = arctan_fn(test_siny, test_cosy)
+
         arctans = arctan_fn(predicted_sin, predicted_cos)
-        r2_array = []
-        for i in range(sin_array.shape[1]):
-            r2_sin = r2_score(sin_array[:,i], predicted_sin[:,i])
-            r2_cos = r2_score(cos_array[:,i], predicted_cos[:,i])
-            r2_array.append(np.mean((r2_sin,r2_cos)))
+        #r2_array = []
+        #for i in range(sin_array.shape[1]):
+        #    r2_sin = r2_score(sin_array[:,i], predicted_sin[:,i])
+        #    r2_cos = r2_score(cos_array[:,i], predicted_cos[:,i])
+        #    r2_array.append(np.mean((r2_sin,r2_cos)))
         self.phase_list = phase_list
         self.h_sin = h_sin
         self.h_cos = h_cos
-        return arctans, phase_list, sin_array, cos_array, r2_array
+        return arctans, phase_list, sin_array, cos_array, (vaf_sin, vaf_cos)
     
     def get_H(self, H):
         if H == 'toe':
@@ -460,6 +474,7 @@ class CortProcessor:
         if Y is None:
             Y_ = self.data['angles']
         else:
+            Y_=Y
             assert isinstance(Y, list), 'Y must be a list'
 
         gait_indices = []
@@ -476,7 +491,7 @@ class CortProcessor:
         if len(samples_list)>1:
             samples = np.concatenate(samples_list)
         else:
-            samples = sample_list[0]
+            samples = samples_list[0]
 	
         avg_gait_samples = int(np.round(np.average(samples)))
         
@@ -722,9 +737,9 @@ class CortProcessor:
                     temp_rate = rates[i][start:end,:]
                     temp_angle = angles[i][start:end,:]
 
-                    #low_number_check = temp_angle[:,6] > 100
-                    #if False in low_number_check:
-                    #    continue
+                    low_number_check = temp_angle[:,6] > 100
+                    if False in low_number_check:
+                        continue
                     if bool_resample:
                         temp_rate = resample(temp_rate, avg_gait_samples, axis=0)
                         temp_angle = resample(temp_angle, avg_gait_samples, axis=0)
@@ -857,3 +872,5 @@ class CortProcessor:
 
     def bodypart_helper(self, bodypart):
         return self.data['bodyparts'].index(bodypart)
+
+

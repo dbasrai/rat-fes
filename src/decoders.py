@@ -8,7 +8,8 @@ from sklearn.metrics import accuracy_score
 from sklearn.decomposition import PCA
 from sklearn.linear_model import Ridge
 from sklearn.linear_model import LinearRegression
-def decode_kfolds(X, Y, k=10, metric =3, preset_h=None):
+from sklearn.metrics import r2_score
+def decode_kfolds(X, Y, k=10, metric =3, preset_h=None, vaf_scoring=True):
     kf = KFold(n_splits=k)
 
     h_list = []
@@ -27,7 +28,11 @@ def decode_kfolds(X, Y, k=10, metric =3, preset_h=None):
             h=preset_h
         predic_y = test_wiener_filter(test_x, h)
         for j in range(predic_y.shape[1]):
-            vaf_array[j, index] = vaf(test_y[:,j], predic_y[:,j])
+            if vaf_scoring:
+                vaf_array[j, index] = vaf(test_y[:,j], predic_y[:,j])
+            else:
+                #use r^2 instead of VAF
+                vaf_array[j, index] = r2_score(test_y[:,j], predic_y[:,j])
             
         if vaf_array[3, index] > best_vaf:
             best_vaf = vaf_array[3, index]
@@ -37,7 +42,7 @@ def decode_kfolds(X, Y, k=10, metric =3, preset_h=None):
 
         index = index+1
     
-    return best_h, vaf_array, final_test_x, final_test_y
+    return best_h, np.average(vaf_array, 1), final_test_x, final_test_y
 
 def decode_kfolds_single(X, Y, k=10):
     kf = KFold(n_splits=k)
@@ -96,10 +101,9 @@ def classify_kfolds(X, Y, k=10):
     
     return best_model, accuracy_list, final_test_x, final_test_y
 
-
 def ridge_fit(b0, x_format, y_format, my_alpha=100.0, angle_number=1):
     #b0 = day0 decoder weights
-    #x = dayk x values (usually PCA) (FORMATTED)
+    #x = dayk x values (usually ALIGNED) (FORMATTED)
     #y = dayk y values (FORMATTED)
 
     xb0 = test_wiener_filter(x_format, b0)
@@ -168,6 +172,12 @@ def pinv_fit(b0, x_format, y_format, angle=1):
     pinv_predic = np.dot(trans_x_format, b0_no_offset)+offset
 
     return clf, pinv_predic
+
+def pinv_predicter(clf, b0, x_format):
+    b0_no_offset = b0[1:,:]
+    offset=b0[0,:]
+    trans_x_format = clf.predict(x_format)
+    return np.dot(trans_x_format, b0_no_offset) + offset
 
 
 

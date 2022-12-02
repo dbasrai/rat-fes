@@ -28,3 +28,6 @@ def flatten(l, ltypes=(list, tuple)):
                 l[i:i + 1] = l[i]
         i += 1
     return ltype(l)
+
+def bins_to_seconds(samples, binsize=50):
+    return np.linspace(0, (samples*binsize)/1000, samples)

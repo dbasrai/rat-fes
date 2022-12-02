@@ -50,7 +50,7 @@ def plot_gait_state_space_2D(list_of_array, subsample=5):
     ax.plot(gait_sampling[:,0], gait_sampling[:,1], alpha=0.2, color='blue')
      
 
-def plot_wiener_filter_predic(test_x, test_y, h):
+def plot_wiener_filter_predic(test_x, test_y, h, time=None):
     predic_y = test_wiener_filter(test_x, h)
     vaffy = vaf(test_y, predic_y)
     
@@ -58,6 +58,13 @@ def plot_wiener_filter_predic(test_x, test_y, h):
 
     ts = np.linspace(0, (samples*50)/1000,
             samples)
+
+    if time is not None:
+        start=time[0]
+        end=time[-1]
+        ts = ts[start:end]
+        test_y=test_y[start:end,:]
+        predic_y=predic_y[start:end,:]
 
     fig, ax = plt.subplots()
     ax.set_title(f'vaf:{vaffy}')

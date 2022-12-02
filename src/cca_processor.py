@@ -8,6 +8,8 @@ from src.decoders import *
 from sklearn.cross_decomposition import CCA
 from sklearn.preprocessing import StandardScaler
 
+from sklearn.model_selection import KFold
+
 class CCAProcessor:
     def __init__(self, cp1, cp2, metric_angle='limbfoot', align=0):
         #align = 0 is sorting and stitching
@@ -318,7 +320,7 @@ class CCAProcessor:
         return new_array[0], new_array[1], new_array[2], new_array[3]
 
     def new_apply_ridge(self, x1=None, y1=None, x2=None, y2=None,
-            metric_angle=None, decoder=None, my_alpha=100):
+            metric_angle=None, decoder=None, my_alpha=100, k=10):
         if x1 is None:
             x1 = self.data['cp1']['proc_x']
         if y1 is None:
@@ -336,7 +338,44 @@ class CCAProcessor:
             b0, nada, nada, nada = self.cp1.decode_angles(scale=False) 
         else:
             b0 = decoder
-        transformer, nada = self.apply_CCA(cp1_x = x1, cp2_x = x2)
+
+        kf = KFold(n_splits=k)
+        best_vaf = -100000
+        vaf_array = []
+        best_h = None
+        best_transformer = None
+        best_predic = None
+        best_y2_format = None
+        for train_index, test_index in kf.split(x2):
+            train_x2, test_x2 = x2[train_index, :], x2[test_index,:]
+            train_y2, test_y2 = y2[train_index, :], y2[test_index, :]
+            train_x1 = x1[train_index, :]
+  
+            transformer, train_x2_aligned = self.apply_CCA(cp1_x = train_x1, cp2_x =
+                    train_x1)
+
+            train_x2_aligned_format, train_y2_format =\
+            format_data(train_x2_aligned, train_y2)
+
+            new_h, _ = ridge_fit(b0, train_x2_aligned_format, train_y2_format,
+                    angle_number=angle_number)
+
+            test_x2_aligned = self.quick_cca(test_x2, transformer, scale=False)
+
+            test_x2_aligned_format, test_y2_format =\
+            format_data(test_x2_aligned, test_y2)
+            test_predic = test_wiener_filter(test_x2_aligned_format,new_h)
+            
+            vaf_array.append(vaf(test_y2_format[:,angle_number],
+                test_predic[:,angle_number]))
+            print(f'test_set_score={vaf_array[-1]}')
+
+            if vaf_array[-1] > best_vaf:
+                best_vaf = vaf_array[-1]
+                best_h = new_h
+                best_transformer = transformer
+                best_predic = test_predic
+                best_y2_format = test_y2_format
 
         #x2_full = self.cp2.data['rates']
         #y2_full = self.cp2.data['angles']
@@ -347,12 +386,7 @@ class CCAProcessor:
         #x2_scca_format, y2_format = self.cp2.stitch_and_format(x2_transform_full,
         #        y2_full)
 
-        x2_format, y2_format = format_data(x2, self.data['cp2']['proc_y'])
-        #testing
-        wpost, ywpost = ridge_fit(b0, x2_format, y2_format, my_alpha=my_alpha,
-                angle_number=angle_number)
-
-        return transformer, wpost, ywpost
+        return best_transformer, best_h, vaf_array, best_predic, best_y2_format 
   
     def old_apply_ridge(self, reduce_dims=False, dims=None, metric_angle=None,
             decoder=None, phase=True):
@@ -439,6 +473,59 @@ class CCAProcessor:
             return scaler.fit_transform(temp2)
         else:
             return temp2
+
+    def new_apply_pinv_transform(self, x=None, y=None, decoder=None,
+            metric_angle='forelimb',  k=10):
+        if decoder is None:
+            decoder, nada, nadax, naday = self.cp1.decode_angles()
+        if x is None:
+            x = self.data['cp2']['proc_x']
+        if y is None:
+            y = self.data['cp2']['proc_y']
+
+        kf = KFold(n_splits=k)
+
+        angle_number = self.cp2.angle_name_helper(metric_angle)
+        vaf_array = []
+        best_vaf = -100000
+        best_transformer = None
+        best_predic = None
+        best_y_format = None
+        for train_index, test_index in kf.split(x):
+            train_x, test_x = x[train_index, :], x[test_index,:]
+            train_y, test_y = y[train_index, :], y[test_index, :]
+            
+            train_x_format, train_y_format = format_data(train_x, train_y)
+
+            transformer, _= pinv_fit(decoder, train_x_format, train_y_format,
+                    angle=angle_number)
+
+            test_x_format, test_y_format = format_data(test_x, test_y)
+            
+            predic = pinv_predicter(transformer, decoder, test_x_format)
+            
+            vaf_array.append(vaf(test_y_format[:,angle_number],
+                predic[:,angle_number]))
+            print(f'test_set_score={vaf_array[-1]}')
+
+            if vaf_array[-1] > best_vaf:
+                best_vaf = vaf_array[-1]
+                best_transformer = transformer
+                best_predic = predic
+                best_y_format = test_y_format
+
+        #x2_full = self.cp2.data['rates']
+        #y2_full = self.cp2.data['angles']
+        #x2_transform_full = []
+        #for x in x2_full:
+        #    x2_transform_full.append(self.quick_cca(x, transformer))
+
+        #x2_scca_format, y2_format = self.cp2.stitch_and_format(x2_transform_full,
+        #        y2_full)
+
+        return best_transformer, vaf_array, best_predic, best_y_format
+
+ 
 
     def apply_pinv_transform(self, x = None, y=None, decoder=None):
         if decoder is None:
