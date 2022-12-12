@@ -133,9 +133,10 @@ class CortProcessor:
             #     commonmode.append(commonhold)
             # commonmode = np.array(commonmode).T
             
-            filtered_neural = fresh_filt(neural, 350, 8000, fs, order = 4)
+            half_filtered_neural = fresh_filt(neural, 350, 8000, fs, order = 4)
+            filtered_neural = notch_filter(half_filtered_neural, fs)
             clean_filtered_neural = remove_artifacts(filtered_neural, fs)
-
+            
             #extract spike, impose refeactory limit (post artifact rejection) and bin
             spikes_tmp = threshold_crossings_refrac(clean_filtered_neural,
                     threshold_multiplier)
@@ -277,20 +278,24 @@ class CortProcessor:
     def stitch_data(self, firing_rates_list, resampled_angles_list):
         '''
         deprecated. you can just use np.vstack instead of this
+        WARNING: VSTACK WILL NOT BE INDEXED AT PARITY UNLESS THE LAST 10 ENTRIES OF EACH LIST IS OMITTED
         '''
         rates = np.vstack(firing_rates_list)
         kin = np.vstack(resampled_angles_list)
 
         return rates, kin
    
-    def spectro1(self, window=4, plotting = False):
+    def spectro1(self, window=4, rates = None, plotting = False):
         '''
         this makes spectrograms! 
+        currently there is no normalization between channels
+        rate stacking is sliced for index parity with stitch and format 
         '''
-        rate_append =[]
-        for i in range(len(self.data['rates'])):
-            rate_append.append(self.data['rates'][i])
-        rates = np.vstack(rate_append)
+        if rates == None:   
+            rate_append =[]
+            for i in range(len(self.data['rates'])):
+                rate_append.append(self.data['rates'][i][10:])
+            rates = np.vstack(rate_append)
         seconds = window
         fsr = 20
         tlim = (rates.shape[0]*50)/1000
@@ -308,7 +313,7 @@ class CortProcessor:
             ax2.set_ylabel('Frequency [Hz]')
             ax2.set_xlabel('Time [sec]')
             ax2.set_title('spike rate spectrogram')
-        return Sxx_sum
+        return Sxx_sum, t, f
 
     def decode_angles(self, X=None, Y=None):
         """
@@ -347,13 +352,17 @@ class CortProcessor:
         except:
             print('did you run process_toe_height() yet?????')
             
-    def decode_phase(self, rates=None, angles=None):
-        if rates is None and angles is None:
+    def decode_phase(self, full_rates=None, full_angles=None):
+        '''
+        if you send in rate and angle information make sure it is preformatted
+        if this is run multiple times (after removing gaits fro example) then it will overwrite the global H values
+        '''
+        if full_rates is None and full_angles is None:
             full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
                         self.data['angles'])
 
-        else:
-            full_rates, full_angles = self.stitch_and_format(rates, angles)
+        # else:
+        #     full_rates, full_angles = self.stitch_and_format(rates, angles)
         phase_list = []
         for i in range(full_angles.shape[1]):
             peak_list = tailored_peaks(full_angles, i, self.data['angle_names'][i])
@@ -374,7 +383,7 @@ class CortProcessor:
         self.phase_list = phase_list
         self.h_sin = h_sin
         self.h_cos = h_cos
-        return arctans, phase_list, r2_array
+        return arctans, phase_list, r2_array, h_sin, h_cos, sin_array, cos_array
     
     def get_H(self, H):
         if H == 'toe':
