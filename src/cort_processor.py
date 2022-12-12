@@ -439,7 +439,6 @@ class CortProcessor:
             return h_toe, vaf_array, final_test_x, final_test_y
         except:
             print('did you run process_toe_height() yet?????')
-<<<<<<< HEAD
 
     def decode_phase(self, rates=None, angles=None, metric_angle='limbfoot'):
         if rates is None and angles is None:
@@ -483,7 +482,7 @@ class CortProcessor:
         self.h_sin = h_sin
         self.h_cos = h_cos
         
-        return arctans, phase_list, h_sin, h_cos, sin_array, cos_array
+        return arctans, phase_list, (vaf_sin, vaf_cos), h_sin, h_cos, sin_array, cos_array
     
     def get_H(self, H):
         if H == 'toe':
