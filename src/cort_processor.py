@@ -11,35 +11,86 @@ from src.decoders import *
 from src.phase_decoder_support import *
 from sklearn.metrics import r2_score
 from scipy.signal import resample, find_peaks
+from sklearn.decomposition import PCA
+import scipy.io as sio
+import cv2
+import copy
 
 class CortProcessor:
     '''
     class that can handle neural + kinematic/EMG data simultaneously
     upon initialization, extracts data from TDT and anipose file
     see cort_processor.md in 'docs' for more information
-    '''
-    
-    
+    '''    
     def __init__(self, folder_path):
-        #see docs/data_folder_layout.md for how to structure folder_path
-        self.handler = FolderHandler(folder_path)
-        self.tdt_data, self.kin_data = self.extract_data()
-        
-        self.crop_list = None
-        crop = self.parse_config()
-        if isinstance(crop, list):
-            self.crop_list = crop
-        
+        if os.path.isdir(folder_path):
+            #see docs/data_folder_layout.md for how to structure folder_path
+            self.handler = FolderHandler(folder_path)
+            self.tdt_data, self.kin_data = self.extract_data()
+            
+            self.crop_list = None
+            crop = self.parse_config()
+            if isinstance(crop, list):
+                self.crop_list = crop
+            
+            self.data={}
+            self.data['rates'] = 'run_process_first'
+            self.data['coords'] = 'run_process_first'
+            self.data['angles'] = 'run_process_first'
+            self.data['toe_height'] = 'run process first, then run process\
+                    toehight'
+
+            self.gait_indices = 'run get_gait_indices first'
+            self.avg_gait_samples = 'run get_gait_indices first'
+
+        else:
+            print('this is filipe data i belive')
+            self.handler = sio.loadmat(folder_path)
+            self.gait_indices=None
+            self.avg_gait_samples=None
+            self.extract_filipe()
+
+    def extract_filipe(self):
         self.data={}
-        self.data['rates'] = 'run_process_first'
-        self.data['coords'] = 'run_process_first'
-        self.data['angles'] = 'run_process_first'
-        self.data['toe_height'] = 'run process first, then run process\
-                toehight'
+        #remoivng 0 rate channels, which
+        #throws an error in wiener filter
+        temp_rates = self.handler['SelectedSpikeData']
+        mask = np.average(temp_rates, 0) > .1
+        temp_rates_remove = temp_rates[:, mask]
+        self.data['rates'] = [temp_rates_remove]
 
-        self.gait_indices = 'run get_gait_indices first'
-        self.avg_gait_samples = 'run get_gait_indices first'
+        self.data['coords'] = [self.handler['SelectedKinematicData']['kindata'][0,0]]
+        angles_temp = self.handler['SelectedKinematicData']['kinmeasures'][0,0][0,0]
+        self.data['angles'] = [np.squeeze(np.array(angles_temp.tolist())).T]
+        angle_names = ['ankle', 'limbfoot', 'hip', 'knee', 'toeheight']
+        self.data['angle_names'] = angle_names
 
+        temp_channels  =\
+        self.handler['SelectedFieldDatastruct']['FieldCh2Use'][0][0][0].tolist()
+        
+        which_channels = copy.deepcopy(temp_channels)
+        for idx in range(temp_rates.shape[1]):
+            if np.average(temp_rates[:, idx]) < .1:
+                baddy = temp_channels[idx]
+                which_channels.remove(baddy)
+
+        self.data['which_channels'] = which_channels
+#        samples = temp_rates.shape[0]
+#        num_channels = 32
+#        original_rates = np.zeros((samples, num_channels))
+#
+#        for idx in range(num_channels):
+#            if idx in which_channels:
+#                position = np.where(which_channels==idx)[0][0]
+#                if np.average(temp_rates[:, position]) > .1:
+#                    original_rates[:, idx] = temp_rates[:, position]
+#                else:
+#                    original_rates[:,idx] = np.nan
+#            else:
+#                original_rates[:,idx] = np.nan
+#
+#        self.data['original_rates'] = [original_rates]
+#
     def parse_config(self):
         '''
         this loads config.yaml file
@@ -165,7 +216,7 @@ class CortProcessor:
         #returning stitched rates --- we don't directly use this for anything.     
         return np.vstack(self.data['rates']), np.vstack(self.data['angles'])
 
-    def process_toe_height(self, toe_num=0):
+    def process_toe_height(self):
         """
         extracts toe height from data['coords'], then scales such that lowest
         toe height is 0.
@@ -174,6 +225,7 @@ class CortProcessor:
         bodypart 0
         """
         try:
+            toe_num = self.bodypart_helper('toe')
             temp_list = []
             self.data['toe_height'] = []
             minimum_toe = 1000 #arbitrary high number to be beat
@@ -235,7 +287,8 @@ class CortProcessor:
 
 
 
-    def stitch_and_format(self, firing_rates_list=None, resampled_angles_list=None):
+    def stitch_and_format(self, firing_rates_list=None,
+            resampled_angles_list=None):
         """
         takes list of rates, list of angles, then converts them into lags of 10
         using format rate in wiener_filter.py, and then stitches them into one
@@ -315,7 +368,32 @@ class CortProcessor:
             ax2.set_title('spike rate spectrogram')
         return Sxx_sum, t, f
 
-    def decode_angles(self, X=None, Y=None):
+
+    def subsample(self, percent, X=None, Y=None):
+        '''
+        function to subsample RAW data (not gait aligned). 
+        we keep it in order since we go by folds.
+        '''
+        if X is None:
+            X = self.data['rates']
+        if Y is None:
+            Y = self.data['angles']
+
+        if percent==1.0:
+            return X, Y
+
+        new_x=[]
+        new_y=[]
+
+        for i in range(len(X)):
+            subsample = int(np.round(percent * X[i].shape[0]))
+            new_x.append(X[i][:subsample,:])
+            new_y.append(Y[i][:subsample,:])
+
+        return new_x, new_y
+        
+
+    def decode_angles(self, X=None, Y=None, metric_angle='limbfoot', scale=False):
         """
         takes list of rates, angles, then using a wiener filter to decode. 
         if no parameters are passed, uses data['rates'] and data['angles']
@@ -325,17 +403,27 @@ class CortProcessor:
         had best formance)
         """
         try:
-            if X is None and Y is None:
-                X, Y = self.stitch_and_format(self.data['rates'], 
-                        self.data['angles'])
+            if X is None:
+                X = self.data['rates']
+            if Y is None:
+                Y = self.data['angles']
+            
+            if scale is True:
+                X = self.apply_scaler(X)
+            X, Y = self.stitch_and_format(X,Y)
 
-            else:
-                X, Y = self.stitch_and_format(X, Y)
-            h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y)
+            metric = self.angle_name_helper(metric_angle)
+
+            h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y,
+                    metric=metric)
+            
             self.h_angle = h_angle
             return h_angle, vaf_array, final_test_x, final_test_y
-        except:
+        except Exception as e:
+            print(e)
             print('did you run process() first.')
+
+    
 
     def decode_toe_height(self):
         '''
@@ -351,39 +439,52 @@ class CortProcessor:
             return h_toe, vaf_array, final_test_x, final_test_y
         except:
             print('did you run process_toe_height() yet?????')
-            
-    def decode_phase(self, full_rates=None, full_angles=None):
-        '''
-        if you send in rate and angle information make sure it is preformatted
-        if this is run multiple times (after removing gaits fro example) then it will overwrite the global H values
-        '''
-        if full_rates is None and full_angles is None:
+
+
+    def decode_phase(self, rates=None, angles=None, metric_angle='limbfoot'):
+        if rates is None and angles is None:
             full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
                         self.data['angles'])
 
-        # else:
-        #     full_rates, full_angles = self.stitch_and_format(rates, angles)
+        elif isinstance(rates, list):
+            full_rates, full_angles = self.stitch_and_format(rates, angles)
+        else:
+            full_rates = rates
+            full_angles = angles
+        
+        angle_number = self.angle_name_helper(metric_angle)
         phase_list = []
+        
         for i in range(full_angles.shape[1]):
             peak_list = tailored_peaks(full_angles, i, self.data['angle_names'][i])
             phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
             phase_list.append(phase_list_tmp)
         phase_list = np.array(phase_list).T
         sin_array, cos_array = sine_and_cosine(phase_list)
-        h_sin, _, _, _ = decode_kfolds(X=full_rates, Y=sin_array)
-        h_cos, _, _, _ = decode_kfolds(X=full_rates, Y=cos_array)
+        h_sin, vaf_sin, test_sinx, test_siny = decode_kfolds(X=full_rates, Y=sin_array,
+                metric=angle_number, vaf_scoring=False)
+        h_cos, vaf_cos, test_cosx, test_cosy = decode_kfolds(X=full_rates, Y=cos_array,
+                metric=angle_number, vaf_scoring=False)
         predicted_sin = predicted_lines(full_rates, h_sin)
         predicted_cos = predicted_lines(full_rates, h_cos)
+        
+       # test_sin = predicted_lines(test_sinx, h_sin)
+        #test_cos = predicted_lines(test_cosx, h_cos)
+        #test_predic_arctans = arctan_fn(test_sin, test_cos)
+        #test_real_arctans = arctan_fn(test_siny, test_cosy)
+
         arctans = arctan_fn(predicted_sin, predicted_cos)
-        r2_array = []
-        for i in range(sin_array.shape[1]):
-            r2_sin = r2_score(sin_array[:,i], predicted_sin[:,i])
-            r2_cos = r2_score(cos_array[:,i], predicted_cos[:,i])
-            r2_array.append(np.mean((r2_sin,r2_cos)))
+        #r2_array = []
+        #for i in range(sin_array.shape[1]):
+        #    r2_sin = r2_score(sin_array[:,i], predicted_sin[:,i])
+        #    r2_cos = r2_score(cos_array[:,i], predicted_cos[:,i])
+        #    r2_array.append(np.mean((r2_sin,r2_cos)))
         self.phase_list = phase_list
         self.h_sin = h_sin
         self.h_cos = h_cos
-        return arctans, phase_list, r2_array, h_sin, h_cos, sin_array, cos_array
+
+        return arctans, phase_list, sin_array, cos_array, (vaf_sin, vaf_cos)
+
     
     def get_H(self, H):
         if H == 'toe':
@@ -403,8 +504,43 @@ class CortProcessor:
         h_mat = self.get_H(H)
         response = impulse_response(AOI, h_mat, phase_list, plotting)
         return response
+
+    def get_gait_indices(self, Y=None, metric_angle='limbfoot'):
+        if Y is None:
+            Y_ = self.data['angles']
+        else:
+            Y_=Y
+            assert isinstance(Y, list), 'Y must be a list'
+
+        gait_indices = []
+        samples_list = []
+
+        angle_number = self.angle_name_helper(metric_angle)
+
+        for angle in Y_:
+            peaks= tailored_peaks(angle, angle_number,metric_angle)
+
+            gait_indices.append(peaks)
+            samples_list.append(np.diff(peaks))
+
+        if len(samples_list)>1:
+            samples = np.concatenate(samples_list)
+        else:
+            samples = samples_list[0]
+	
+        avg_gait_samples = int(np.round(np.average(samples)))
         
-    def get_gait_indices(self, Y=None):
+        if Y is None:
+            self.gait_indices = gait_indices
+            self.avg_gait_samples = avg_gait_samples
+
+
+        return gait_indices, avg_gait_samples		
+			 
+        
+
+        
+    def deprec_get_gait_indices(self, Y=None, metric_angle='limbfoot'):
         '''
         This takes a kinematic variable, and returns indices where each peak is
         found. It also returns the average number of samples between each
@@ -417,27 +553,41 @@ class CortProcessor:
         Divide_into_gaits for instance takes in these indices, and divides both
         the kinematics and rates into gait cycles.
         '''
-        limbfoot_angles = []
         if Y is None:
-            for angles in self.data['angles']:
-                limbfoot_angles.append(angles[:,3])
+            Y_ = self.data['angles']
         else:
             assert isinstance(Y, list), 'Y must be a list'
-            limbfoot_angles = Y
+            Y_=Y
+
+        angle_number = self.angle_name_helper(metric_angle)
 
         gait_indices = []
         samples_list = []
-        for angle in limbfoot_angles:
-            peaks, nada = find_peaks(angle, prominence=10)
-            peaks = np.append(peaks, np.size(angle))
+        for angle in Y_:
+            if angle.ndim > 1:
+                angle = angle[:, angle_number]
+            temp_peaks, nada = find_peaks(angle, prominence=10, distance=5)
+            avg_ = np.average(angle[temp_peaks])
+            std_ = np.std(angle[temp_peaks])
+
+
+            temp2_peaks = temp_peaks[np.argwhere(angle[temp_peaks] < avg_ +
+                30)]
+            temp2_peaks = np.squeeze(temp2_peaks)
+            peaks = temp2_peaks[np.argwhere(angle[temp2_peaks] > avg_ -
+                30)]
+            peaks = np.squeeze(peaks)
+            peaks = np.append(peaks, np.size(angle)-1)
             peaks = np.insert(peaks, 0, 0)
             gait_indices.append(peaks)
             samples_list.append(np.diff(peaks))
+
         
         if len(samples_list) > 1:
             samples = np.concatenate(samples_list)
         else:
             samples = samples_list[0]
+
         avg_gait_samples = int(np.round(np.average(samples)))
         
         if Y is None:
@@ -499,8 +649,12 @@ class CortProcessor:
                 
                 trial_rate_gait.append(temp_rate)
                 trial_angle_gait.append(temp_angle)
-            X_gait.append(np.array(trial_rate_gait))
-            Y_gait.append(np.array(trial_angle_gait))
+            X_gait.append(trial_rate_gait)
+            Y_gait.append(trial_angle_gait)
+        
+        if bool_resample:
+            X_gait = np.array(X_gait)
+            Y_gait = np.array(Y_gait)
 
         if X is None:
             self.rates_gait = X_gait
@@ -509,31 +663,69 @@ class CortProcessor:
 
         return X_gait, Y_gait #return list of list of lists lol
 
+    def toe_to_stance_swing(self, toe_height):
+        peaks, _ = find_peaks(toe_height, height=12)
+        peaks = np.append(peaks, np.size(toe_height))
+        peaks = np.insert(peaks, 0, 0)
+        ss_list = []
+
+        for i in range(np.size(peaks)-1):
+            end=peaks[i+1]
+            start=peaks[i]
+
+            gait = toe_height[start:end]
+            dx = np.gradient(gait)
+            ddx = np.gradient(dx)
+
+            ddx_peaks, _ = find_peaks(ddx, height=0.02)
+            if np.size(ddx_peaks) == 2:
+                ss = np.ones(np.size(gait), dtype=bool)
+                ss[ddx_peaks[0]:ddx_peaks[1]] = 0
+            else:
+                minny = np.amin(gait)
+                ss = gait>minny+2
+
+            ss_list.append(ss)
+
+        stance_swing = np.hstack(ss_list)
+        return stance_swing
+
+
+
+    def get_stance_swing(self):
+        if self.data['toe_height'] is None:
+            output = 'run process toe height first'
+
+        toe_list = self.data['toe_height']
+        stance_swing_list = []
+
+        for toe in toe_list:
+            stance_swing_list.append(self.toe_to_stance_swing(toe))
+
+
+        rates = self.data['rates']
+
+        X, Y = self.stitch_and_format(rates, stance_swing_list)
+        return X, Y
+
+
+
     def remove_bad_gaits(self, X=None, Y=None, gait_indices=None,
             avg_gait_samples = None, bool_resample=True):
         '''
         similar to divide into gaits, but instead of just dividing, it also
         removes any gait cycles that have a much smaller or much larger amount
-        of samples. in a sense it divies up gaits and removes bad ones.0
+        of samples. in a sense it divies up gaits and removes bad ones.
+
+        must run get gait indices first!
         '''
         if gait_indices is None:
             gait_indices = self.gait_indices
+            #print(self.gait_indices)
         
         if avg_gait_samples is None:
             avg_gait_samples = self.avg_gait_samples
-        
-        
-        above = 1.33 * avg_gait_samples
-        below = .66 * avg_gait_samples
-        bads_list = []
-        for idx in gait_indices:
-
-            bad_above = np.argwhere(np.diff(idx)>above)
-            bad_below = np.argwhere(np.diff(idx)<below)
-
-            bads_list.append(np.squeeze(np.concatenate((bad_above,
-                bad_below))).tolist())
-
+ 
         if X is None:
             rates = self.data['rates']
         elif isinstance(X, list):
@@ -551,13 +743,27 @@ class CortProcessor:
             print('Y must be list')
             return
 
+       
+        #above = slow gait cycles, below = too fast gait cycles 
+        above = 1.33 * avg_gait_samples
+        below = .66 * avg_gait_samples
+        bads_list = []
+        for idx in gait_indices:
+            #we are iterating and adding to a list any too slow or fast gaits
+            bad_above = np.argwhere(np.diff(idx)>above)
+            bad_below = np.argwhere(np.diff(idx)<below)
+
+            bads_list.append(np.squeeze(np.concatenate((bad_above,
+                bad_below))).tolist())
+            #bad_list now has all the indices of bad gait cycles!
         proc_rates = []
         proc_angles = []
         for i, trial_indices in enumerate(gait_indices):
-            trial_rate_gait = []
-            trial_angle_gait = []
+            #trial_rate_gait = []
+            #trial_angle_gait = []
             for j in range(np.size(trial_indices)-1):
                 if j in bads_list[i]:
+                    #skip if its a bad gait cycle!
                     continue
                 else:
                     end = trial_indices[j+1]
@@ -565,15 +771,19 @@ class CortProcessor:
 
                     temp_rate = rates[i][start:end,:]
                     temp_angle = angles[i][start:end,:]
+
+                    low_number_check = temp_angle[:,6] > 100
+                    if False in low_number_check:
+                        continue
                     if bool_resample:
                         temp_rate = resample(temp_rate, avg_gait_samples, axis=0)
                         temp_angle = resample(temp_angle, avg_gait_samples, axis=0)
-                    trial_rate_gait.append(temp_rate)
-                    trial_angle_gait.append(temp_angle)
+                    proc_rates.append(temp_rate)
+                    proc_angles.append(temp_angle)
  
-            proc_rates.append(trial_rate_gait)
-            proc_angles.append(trial_angle_gait)
-
+            #proc_rates.append(trial_rate_gait)
+            #proc_angles.append(trial_angle_gait)
+        
         return np.vstack(proc_rates), np.vstack(proc_angles)
                 
  
@@ -617,22 +827,62 @@ class CortProcessor:
         
         return phase_list #use np.hstack on output to get continuous
 
-    def with_PCA(self, dims):
+    def apply_PCA(self, dims=None, X=None, transformer=None):
         '''
-        this is todo, probably doesn't work.
+        this works now?
         '''
-        #TODO
-        temp_rates, nada = self.stitch_data(self.rate_list, self.angle_list)
-        nada, pca_output = apply_PCA(temp_rates.T, dims)
+        if X is None:
+            X=self.data['rates']
+        if dims is None:
+            dims=.95
+        X_full = np.vstack(X)
+        if transformer is None:
+            pca_object = PCA(n_components = dims)
+            pca_object.fit(X_full)
+        else:
+            pca_object = transformer
+
+        x_pca = []
+
+        for X_recording in X:
+            x_pca.append(pca_object.transform(X_recording))
         
-        self.PCA_rate_list = []
+        self.num_components = x_pca[0].shape[1]
+        self.pca_object = pca_object
+        return x_pca
 
-        for rate in self.rate_list:
-            temp_output = pca_output.transform(rate.T)
-            self.PCA_rate_list.append(temp_output.T)
 
-        return self.PCA_rate_list, pca_output
+    def apply_scaler(self, X=None, scaler=None):
+        if X is None:
+            X=self.data['rates']
+        if scaler is None:
+            my_scaler=StandardScaler()
+            X_full = np.vstack(X)
+            my_scaler.fit(X_full)
+        else:
+            my_scaler = scaler
+        
+        scaled_X = []
+        for X_recording in X:
+            scaled_X.append(my_scaler.transform(X_recording))
+        
+        self.scaler = my_scaler
+        return scaled_X
 
+
+    def display_frame(self, video_path, recording_number, sample_number):
+        cap = cv2. VideoCapture(video_path)
+        crop_times = self.crop_list[recording_number]
+        first_frame = crop_times[0] * 200
+        my_frame = first_frame + (sample_number * 4)
+        cap.set(1, my_frame)
+        ret, frame = cap.read()
+
+        video_time = my_frame/200
+        print(f'video_time is: {video_time}')
+
+        return frame
+    
     def predicted_lines_malleable(self, h_sin, h_cos):
         try:  
             full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
@@ -651,5 +901,11 @@ class CortProcessor:
         except:
             print('error lol')
             print('Feed in sin and cos H matricies from another session to test gernealizability')
-            
-            
+
+    def angle_name_helper(self, angle_name):
+        return self.data['angle_names'].index(angle_name)
+
+    def bodypart_helper(self, bodypart):
+        return self.data['bodyparts'].index(bodypart)
+
+
