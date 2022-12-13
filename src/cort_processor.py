@@ -331,7 +331,7 @@ class CortProcessor:
     def stitch_data(self, firing_rates_list, resampled_angles_list):
         '''
         deprecated. you can just use np.vstack instead of this
-        WARNING: VSTACK WILL NOT BE INDEXED AT PARITY UNLESS THE LAST 10 ENTRIES OF EACH LIST IS OMITTED
+        WARNING: VSTACK WILL NOT BE INDEXED AT PARITY TO STITCH AND FORMAT UNLESS THE LAST 10 ENTRIES OF EACH LIST IS OMITTED
         '''
         rates = np.vstack(firing_rates_list)
         kin = np.vstack(resampled_angles_list)
@@ -461,29 +461,32 @@ class CortProcessor:
             phase_list.append(phase_list_tmp)
         phase_list = np.array(phase_list).T
         sin_array, cos_array = sine_and_cosine(phase_list)
-        h_sin, vaf_sin, test_sinx, test_siny = decode_kfolds(X=full_rates, Y=sin_array,
-                metric=angle_number, vaf_scoring=False)
-        h_cos, vaf_cos, test_cosx, test_cosy = decode_kfolds(X=full_rates, Y=cos_array,
-                metric=angle_number, vaf_scoring=False)
-        predicted_sin = predicted_lines(full_rates, h_sin)
-        predicted_cos = predicted_lines(full_rates, h_cos)
         
-       # test_sin = predicted_lines(test_sinx, h_sin)
-        #test_cos = predicted_lines(test_cosx, h_cos)
-        #test_predic_arctans = arctan_fn(test_sin, test_cos)
-        #test_real_arctans = arctan_fn(test_siny, test_cosy)
-
-        arctans = arctan_fn(predicted_sin, predicted_cos)
-        #r2_array = []
-        #for i in range(sin_array.shape[1]):
-        #    r2_sin = r2_score(sin_array[:,i], predicted_sin[:,i])
-        #    r2_cos = r2_score(cos_array[:,i], predicted_cos[:,i])
-        #    r2_array.append(np.mean((r2_sin,r2_cos)))
-        self.phase_list = phase_list
+        length = full_rates.shape[0]
+        rand = np.random.randint(0,5)
+        twotenth = math.ceil(length/10)*2
+        test_splitter = twotenth*rand
+        test_cos = cos_array[test_splitter:twotenth+test_splitter,]
+        train_cos = np.vstack((cos_array[:test_splitter,],cos_array[twotenth+test_splitter:,]))
+        test_sin = sin_array[test_splitter:twotenth+test_splitter,]
+        train_sin = np.vstack((sin_array[:test_splitter,],sin_array[twotenth+test_splitter:,]))
+        test_rates = full_rates[test_splitter:twotenth+test_splitter,]
+        train_rates = np.vstack((full_rates[:test_splitter,],full_rates[twotenth+test_splitter:,]))
+        test_phase = phase_list[test_splitter:twotenth+test_splitter,]
+        
+        h_sin, _, _, _ = decode_kfolds(X=train_rates, Y=train_sin,
+                metric=angle_number, vaf_scoring=False)
+        h_cos, _, _, _ = decode_kfolds(X=train_rates, Y=train_cos,
+                metric=angle_number, vaf_scoring=False)
+        predicted_sin = predicted_lines(test_rates, h_sin)
+        predicted_cos = predicted_lines(test_rates, h_cos)
+        test_arctans = arctan_fn(predicted_sin, predicted_cos)
+        
         self.h_sin = h_sin
         self.h_cos = h_cos
+        self.phase_list = phase_list
 
-        return arctans, phase_list, sin_array, cos_array, (vaf_sin, vaf_cos)
+        return test_arctans, test_phase, phase_list, h_sin, h_cos 
 
     
     def get_H(self, H):
