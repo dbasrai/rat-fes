@@ -340,7 +340,7 @@ class CortProcessor:
    
     def spectro1(self, window=4, rates = None, plotting = False):
         '''
-        this makes spectrograms! 
+        this makes spectrograms of rate information!
         currently there is no normalization between channels
         rate stacking is sliced for index parity with stitch and format 
         '''
