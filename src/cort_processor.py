@@ -486,7 +486,7 @@ class CortProcessor:
         self.h_cos = h_cos
         self.phase_list = phase_list
 
-        return test_arctans, test_phase, phase_list, h_sin, h_cos 
+        return test_arctans, test_phase, test_rates, phase_list, h_sin, h_cos 
 
     
     def get_H(self, H):
