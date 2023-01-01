@@ -8,6 +8,7 @@ from src.filters import *
 from src.folder_handler import *
 from src.tdt_support import *
 from src.decoders import *
+from src.plotter import *
 from src.phase_decoder_support import *
 from sklearn.metrics import r2_score
 from scipy.signal import resample, find_peaks
@@ -481,12 +482,19 @@ class CortProcessor:
         predicted_sin = predicted_lines(test_rates, h_sin)
         predicted_cos = predicted_lines(test_rates, h_cos)
         test_arctans = arctan_fn(predicted_sin, predicted_cos)
+
+        r2 = []
+        for i in range(test_sin.shape[1]):
+            r2_sin = r2_score(test_sin[:,i], predicted_sin[:,i])
+            r2_cos = r2_score(test_cos[:,i], predicted_cos[:,i])
+            r2_i = np.mean((r2_sin, r2_cos))
+            r2.append(r2_i)
         
         self.h_sin = h_sin
         self.h_cos = h_cos
         self.phase_list = phase_list
 
-        return test_arctans, test_phase, test_rates, phase_list, h_sin, h_cos 
+        return r2, test_arctans, test_phase, test_rates, full_rates, phase_list, h_sin, h_cos
 
     
     def get_H(self, H):
@@ -910,5 +918,42 @@ class CortProcessor:
 
     def bodypart_helper(self, bodypart):
         return self.data['bodyparts'].index(bodypart)
+    
+    def DOM(self, angle_name='knee', plotting=True):
+        index = self.data['angle_names'].index(angle_name)
+        phase_list = []  
+        _, full_angles = self.stitch_and_format(self.data['rates'], 
+                        self.data['angles'])
+        for i in range(full_angles.shape[1]):
+            peak_list = tailored_peaks(full_angles, i, self.data['angle_names'][i])
+            phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
+            phase_list.append(phase_list_tmp)
+        phase_list = np.array(phase_list).T
+        phase_rads = np.radians(phase_list[:,index])
+        ratestack = []
+        for i in range(len(self.data['rates'])):
+            ratestack.append(self.data['rates'][i][9:-1])
+        rs_rates = np.vstack(ratestack)
+        magn = []
+        heading = []
+        for j in range(rs_rates.shape[1]):
+            sum1 = 0
+            sum_sin = 0
+            sum_cos = 0
+            for i in range(rs_rates.shape[0]):
+                sum1 = sum1 + rs_rates[i,j]
+                sum_sin = sum_sin + rs_rates[i,j]*np.sin(phase_rads[i])
+                sum_cos = sum_cos + rs_rates[i,j]*np.cos(phase_rads[i])
+            sin_bar = sum_sin/sum1
+            cos_bar = sum_cos/sum1
+            r = (sin_bar**2 + cos_bar**2)**(1/2)
+            theta = np.arctan2(sin_bar, cos_bar)
+            magn.append(r)
+            heading.append(theta)
+        magn = np.array(magn)
+        heading = np.array(heading)
+        if plotting == True:
+            compass(heading, magn)
+        return magn, heading
 
 

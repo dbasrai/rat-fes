@@ -4,6 +4,26 @@ import numpy as np
 from src.wiener_filter import *
 from matplotlib.pyplot import cm
 
+def compass(angles, radii, arrowprops=None):
+    """
+    credit to: https://ocefpaf.github.io/python4oceanographers/blog/2015/02/09/compass/
+    """
+
+    fig, ax = plt.subplots(subplot_kw=dict(polar=True))
+    ax.fill_between(np.linspace(0, np.pi, 100), 0,1, color = 'r', alpha = 0.5, label='Stance')
+    ax.fill_between(np.linspace(np.pi, 2*np.pi, 100), 0,1, color = 'g', alpha = 0.5, label = 'Swing')
+    ax.legend(loc='lower right')
+    kw = dict(arrowstyle="->", color='k')
+    if arrowprops:
+        kw.update(arrowprops)
+    [ax.annotate("", xy=(angle, radius), xytext=(0, 0),
+                 arrowprops=kw) for
+     angle, radius in zip(angles, radii)]
+
+    ax.set_ylim(0, np.max(radii))
+
+    return fig, ax
+
 def plot_raster(df):
     fig=plt.figure()
     ax= fig.add_subplot(111)
