@@ -9,7 +9,14 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import Ridge
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
-def decode_kfolds(X, Y, k=10, metric =3, preset_h=None, vaf_scoring=True):
+def decode_kfolds(X, Y, metric_angle, k=10, preset_h=None, vaf_scoring=True, forced_test_index = None):
+    '''
+    01/08/23
+    inputs and outputs reorganized
+    updates made to correct hard coded metric angle
+    option to overrwrite selected final_test_indicies to accomodate test cases where 
+    multiple decoders are used for a single prediction 
+    '''
     kf = KFold(n_splits=k)
 
     h_list = []
@@ -20,7 +27,7 @@ def decode_kfolds(X, Y, k=10, metric =3, preset_h=None, vaf_scoring=True):
     for train_index, test_index in kf.split(X):
 
 
-        train_x, test_x = X[train_index, :], X[test_index,:]
+        train_x, test_x = X[train_index, :], X[test_index, :]
         train_y, test_y = Y[train_index, :], Y[test_index, :]
         if preset_h is None:
             h=train_wiener_filter(train_x, train_y)
@@ -34,15 +41,23 @@ def decode_kfolds(X, Y, k=10, metric =3, preset_h=None, vaf_scoring=True):
                 #use r^2 instead of VAF
                 vaf_array[j, index] = r2_score(test_y[:,j], predic_y[:,j])
             
-        if vaf_array[3, index] > best_vaf:
-            best_vaf = vaf_array[3, index]
+        if vaf_array[metric_angle, index] > best_vaf:
+            best_vaf = vaf_array[metric_angle, index]
             best_h = h
             final_test_x = test_x
             final_test_y = test_y
+            final_test_index = test_index
 
         index = index+1
     
-    return best_h, np.average(vaf_array, 1), final_test_x, final_test_y
+    if forced_test_index is not None:
+        final_test_x = X[forced_test_index, :]
+        final_test_y = Y[forced_test_index, :]
+        
+    
+    return best_h, np.average(vaf_array, 1), final_test_x, final_test_y, final_test_index
+
+
 
 def decode_kfolds_single(X, Y, k=10):
     kf = KFold(n_splits=k)

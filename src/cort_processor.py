@@ -443,6 +443,11 @@ class CortProcessor:
 
 
     def decode_phase(self, rates=None, angles=None, metric_angle='limbfoot'):
+        '''
+        this has a non-zero chance of returning overfit cos test cases
+        this probability is assumed to be less than the 1% predicted by random selection of kfolds
+        as the quality of the data along equally divded splits is assumed to be variable
+        '''
         if rates is None and angles is None:
             full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
                         self.data['angles'])
@@ -463,38 +468,18 @@ class CortProcessor:
         phase_list = np.array(phase_list).T
         sin_array, cos_array = sine_and_cosine(phase_list)
         
-        length = full_rates.shape[0]
-        rand = np.random.randint(0,5)
-        twotenth = math.ceil(length/10)*2
-        test_splitter = twotenth*rand
-        test_cos = cos_array[test_splitter:twotenth+test_splitter,]
-        train_cos = np.vstack((cos_array[:test_splitter,],cos_array[twotenth+test_splitter:,]))
-        test_sin = sin_array[test_splitter:twotenth+test_splitter,]
-        train_sin = np.vstack((sin_array[:test_splitter,],sin_array[twotenth+test_splitter:,]))
-        test_rates = full_rates[test_splitter:twotenth+test_splitter,]
-        train_rates = np.vstack((full_rates[:test_splitter,],full_rates[twotenth+test_splitter:,]))
-        test_phase = phase_list[test_splitter:twotenth+test_splitter,]
-        
-        h_sin, _, _, _ = decode_kfolds(X=train_rates, Y=train_sin,
-                metric=angle_number, vaf_scoring=False)
-        h_cos, _, _, _ = decode_kfolds(X=train_rates, Y=train_cos,
-                metric=angle_number, vaf_scoring=False)
+        h_sin, r2_sin, test_rates, test_sin, sin_test_index = decode_kfolds(X=full_rates, Y=sin_array, metric_angle=angle_number, vaf_scoring=False)
+        h_cos, r2_cos, _, test_cos, _ = decode_kfolds(X=full_rates, Y=cos_array, metric_angle=angle_number, vaf_scoring=False, forced_test_index = sin_test_index)
         predicted_sin = predicted_lines(test_rates, h_sin)
         predicted_cos = predicted_lines(test_rates, h_cos)
-        test_arctans = arctan_fn(predicted_sin, predicted_cos)
-
-        r2 = []
-        for i in range(test_sin.shape[1]):
-            r2_sin = r2_score(test_sin[:,i], predicted_sin[:,i])
-            r2_cos = r2_score(test_cos[:,i], predicted_cos[:,i])
-            r2_i = np.mean((r2_sin, r2_cos))
-            r2.append(r2_i)
+        predicted_arctans = arctan_fn(predicted_sin, predicted_cos)
+        test_arctans = phase_list[sin_test_index, :]
         
         self.h_sin = h_sin
         self.h_cos = h_cos
         self.phase_list = phase_list
 
-        return r2, test_arctans, test_phase, test_rates, full_rates, phase_list, h_sin, h_cos
+        return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates
 
     
     def get_H(self, H):
