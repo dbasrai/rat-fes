@@ -244,7 +244,23 @@ class CortProcessor:
         except Exception as e: 
             print('failed!! did you run process first')
             print(e)
+            
+    def marker_position(self, bodypart = 'toe', dimension = 1):
+        """
+        updated version of process_toe_height that 
+        a) takes any bodypart
+        b) accounts for reformatting splices 
+        """
+        mark_num = self.bodypart_helper(bodypart)
+        mark_stack = []
+        for i in range(len(self.data['coords'])):
+            mark_stack.append(self.data['coords'][i][9:-1, mark_num, dimension])
+        mark_y = np.hstack(mark_stack)
+        mark_min = np.min(mark_y)
+        mark_y_norm = mark_y - mark_min
+        return mark_y_norm.T
 
+        
     def crop_data(self, tdt_data, kin_data, crop):
         '''
         helper function that both syncs and crops neural/kinematic data
@@ -479,7 +495,7 @@ class CortProcessor:
         self.h_cos = h_cos
         self.phase_list = phase_list
 
-        return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates
+        return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates, phase_list
 
     
     def get_H(self, H):
