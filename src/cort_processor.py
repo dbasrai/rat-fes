@@ -245,7 +245,7 @@ class CortProcessor:
             print('failed!! did you run process first')
             print(e)
             
-    def marker_position(self, bodypart = 'toe', dimension = 1):
+    def marker_position(self, bodypart, dimension):
         """
         updated version of process_toe_height that 
         a) takes any bodypart
@@ -486,8 +486,10 @@ class CortProcessor:
         
         h_sin, r2_sin, test_rates, test_sin, sin_test_index = decode_kfolds(X=full_rates, Y=sin_array, metric_angle=angle_number, vaf_scoring=False)
         h_cos, r2_cos, _, test_cos, _ = decode_kfolds(X=full_rates, Y=cos_array, metric_angle=angle_number, vaf_scoring=False, forced_test_index = sin_test_index)
+        h_atantest, r2_test, _, _, _ = decode_kfolds(X=full_rates, Y=phase_list, metric_angle=angle_number, vaf_scoring=False, forced_test_index = sin_test_index)
         predicted_sin = predicted_lines(test_rates, h_sin)
         predicted_cos = predicted_lines(test_rates, h_cos)
+        order_test = predicted_lines(test_rates, h_atantest)
         predicted_arctans = arctan_fn(predicted_sin, predicted_cos)
         test_arctans = phase_list[sin_test_index, :]
         
@@ -495,7 +497,7 @@ class CortProcessor:
         self.h_cos = h_cos
         self.phase_list = phase_list
 
-        return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates, phase_list
+        return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates, phase_list, order_test, r2_test
 
     
     def get_H(self, H):
