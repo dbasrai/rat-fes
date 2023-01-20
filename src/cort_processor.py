@@ -137,7 +137,7 @@ class CortProcessor:
 
         return tdt_data_list, kin_data_list
 
-    def process(self, manual_crop_list=None, threshold_multiplier = -3.0, binsize = 0.05):
+    def process(self, manual_crop_list=None, threshold_multiplier = -3.0, binsize = 0.05, clear_storage = True):
         """
         1) takes raw neural data, then bandpass+notch filters, then extracts
         spikes using threshold_multiplier, then bins into firing rates with bin
@@ -210,8 +210,9 @@ class CortProcessor:
             self.data['coords'].append(resampled_coords)
 
             #remove raw data to save memory
-            self.tdt_data[i] = 0
-            self.kin_data[i] = 0 
+            if clear_storage == True:
+                self.tdt_data[i] = 0
+                self.kin_data[i] = 0 
             gc.collect()
         
         #returning stitched rates --- we don't directly use this for anything.     
@@ -294,9 +295,12 @@ class CortProcessor:
 
         temp_coords = kin_data['coords']
         temp_angles = kin_data['angles']
+        temp_frames = kin_data['fnum']
 
         crop_kin_datafile['coords'] = temp_coords[kin_start:kin_end,:,:]
         crop_kin_datafile['angles'] = temp_angles[kin_start:kin_end,:]
+        crop_kin_datafile['fnum'] = temp_frames[kin_start:kin_end]
+        
         #maybe need edge-case if only single angle/bodypart
         
         return crop_tdt_datafile, crop_kin_datafile

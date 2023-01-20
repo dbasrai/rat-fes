@@ -35,10 +35,12 @@ def extract_kin_data(coords_csv, angles_csv):
     kin_data = {}
     bp_list, coords = extract_anipose_3d(coords_csv)
     angles_list, angles = extract_anipose_angles(angles_csv)
+    fnum = extract_fnum(angles_csv)
     kin_data['bodyparts'] = bp_list
     kin_data['coords'] = coords
     kin_data['angles_list'] = angles_list
     kin_data['angles'] = angles
+    kin_data['fnum'] = fnum
 
     return kin_data
 
@@ -91,6 +93,12 @@ def extract_anipose_angles(csv):
 
     return bp_list, np.array(angles_list).T
 
+def extract_fnum(csv):
+    df = pd.read_csv(csv)
+    df = df.iloc[:,df.columns.get_loc('fnum')]
+    frame_list = np.array(df).T
+
+    return frame_list
 
 def deprec_crop_data(tdt_data, kinematics, np_ts, crop=(0,70)):
     #add in start_time/end_time in video, output cropped cortical/kin data
