@@ -15,6 +15,12 @@ def fresh_filt(neural, lowcut, highcut, fs, order = 5):
     y = lfilter(b, a, neural)
     return y.T
 
+def lowpass_filt(data, highcut, fs, order = 5):
+    data = data.T
+    b, a = butter_lowpass(highcut, fs, order=order)
+    y = lfilter(b, a, data)
+    return y.T
+
 def butter_bandpass(lowcut, highcut, fs, order=2):
     nyq = 0.5 * fs
     low = lowcut / nyq
