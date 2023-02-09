@@ -23,7 +23,8 @@ def extract_tdt(tdt_file, npts_file):
     tdt_dict['fs'] = data.streams.Wav1.fs
     tdt_dict['ts'] = np.arange(0, tdt_dict['neural'].shape[0] / tdt_dict['fs'], 
             1/tdt_dict['fs'])
-    tdt_dict['pulse_time'] = data.epocs.Out1.onset[0]
+    # Use camera trigger pulse onset time from Port-C.1 on RZ5 Gizmo in Synapse, 
+    tdt_dict['pulse_time'] = data.epocs.PtC1.onset[0] 
     
     tdt_dict['cam_timestamps'] = np.load(npts_file)
 
@@ -46,8 +47,15 @@ def extract_kin_data(coords_csv, angles_csv):
 
 def get_sync_sample(tdt_data):
     cam_ts = tdt_data['cam_timestamps']
-    delay = cam_ts[1]-cam_ts[0]
-    start_time = tdt_data['pulse_time'] + delay
+    # There is a delay after cameras receive pulse, hence why timestamps are normalized to 2nd element
+    # there is also a 3 sample delay before trigger is actually sent out from Port-C.1 and Port-C.3 to cameras (read IODelays.pdf)
+    delay = cam_ts[1]-cam_ts[0] + 3*(1/24414.0625)
+    
+    # If the RZ5 and PZA have the same sampling rate (and data is extracted from stream gizmo) there is a 24 sample delay. 
+    # ie. if a spike shows up at t = 10 in data, it's actually a spike that happened 24 samples ago, so the real start time of the data
+    # is much later in the data
+    RZ_to_PZ_delay = 24*(1/24414.0625)
+    start_time = tdt_data['pulse_time'] + delay + RZ_to_PZ_delay
     sample_number = start_time * tdt_data['fs']
     return round(sample_number)
 
