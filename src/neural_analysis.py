@@ -50,14 +50,17 @@ def autothreshold_crossings(neural, multiplier): #this finds all upwards thresho
 
     return np.array(spikes).T #samples x spikes
 
-def threshold_crossings_refrac(neural, multiplier):  # (negative peaks only)
+def threshold_crossings_refrac(neural, fs, multiplier, wind):  # (negative peaks only)
     neural = neural.T
     refrac = 0.0005
     spikes_tmp = []
-    
+    rolling_window = int(fs*wind)
     for channel in neural:
-        std = np.std(channel)
-        crossings = np.diff(channel < multiplier*std, prepend=0)
+        rolling_std = np.squeeze(np.array(pd.DataFrame(channel).rolling(window=rolling_window).std()))
+        for i in range(0,rolling_window-1):
+            rolling_std[i] = rolling_std[rolling_window-1]
+        threshold = multiplier*rolling_std
+        crossings = np.diff(channel < threshold, prepend=0)
         np.put(crossings, np.where(crossings==-1), 0) #only catch crossing
         spikes_tmp.append(crossings)
 

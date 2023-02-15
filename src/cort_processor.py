@@ -11,9 +11,12 @@ from src.decoders import *
 from src.plotter import *
 from src.phase_decoder_support import *
 from sklearn.metrics import r2_score
+from sklearn.utils import shuffle
 from scipy.signal import resample, find_peaks
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import MinMaxScaler
 import scipy.io as sio
+import pandas as pd
 import cv2
 import copy
 
@@ -137,7 +140,7 @@ class CortProcessor:
 
         return tdt_data_list, kin_data_list
 
-    def process(self, manual_crop_list=None, threshold_multiplier = -3.0, binsize = 0.05, clear_storage = True):
+    def process(self, manual_crop_list=None, threshold_multiplier = -3.0, window = 15, binsize = 0.05, clear_storage = True):
         """
         1) takes raw neural data, then bandpass+notch filters, then extracts
         spikes using threshold_multiplier, then bins into firing rates with bin
@@ -190,8 +193,8 @@ class CortProcessor:
             clean_filtered_neural = remove_artifacts(filtered_neural, fs)
             
             #extract spike, impose refeactory limit (post artifact rejection) and bin
-            spikes_tmp = threshold_crossings_refrac(clean_filtered_neural,
-                    threshold_multiplier)
+            spikes_tmp = threshold_crossings_refrac(clean_filtered_neural, fs,
+                    threshold_multiplier, window)
             spikes = refractory_limit(spikes_tmp, fs)
             firing_rates = spike_binner(spikes, fs, binsize)
             
@@ -205,7 +208,6 @@ class CortProcessor:
                     axis=0)
             resampled_coords = resample(temp_coords, firing_rates.shape[0],
                     axis=0)
-
             self.data['angles'].append(resampled_angles)
             self.data['coords'].append(resampled_coords)
 
@@ -255,7 +257,7 @@ class CortProcessor:
         mark_num = self.bodypart_helper(bodypart)
         mark_stack = []
         for i in range(len(self.data['coords'])):
-            mark_stack.append(self.data['coords'][i][9:-1, mark_num, dimension])
+            mark_stack.append(self.data['coords'][i][9:, mark_num, dimension])
         mark_y = np.hstack(mark_stack)
         mark_min = np.min(mark_y)
         mark_y_norm = mark_y - mark_min
@@ -309,7 +311,7 @@ class CortProcessor:
 
 
     def stitch_and_format(self, firing_rates_list=None,
-            resampled_angles_list=None):
+            resampled_angles_list=None, N = 10):
         """
         takes list of rates, list of angles, then converts them into lags of 10
         using format rate in wiener_filter.py, and then stitches them into one
@@ -330,7 +332,7 @@ class CortProcessor:
 
         for i in range(len(firing_rates_list)):
             f_rate, f_angle = format_data(firing_rates_list[i],
-                    resampled_angles_list[i])
+                    resampled_angles_list[i], N)
             formatted_rates.append(f_rate)
             formatted_angles.append(f_angle)
 
@@ -359,35 +361,6 @@ class CortProcessor:
 
         return rates, kin
    
-    def spectro1(self, window=4, rates = None, plotting = False):
-        '''
-        this makes spectrograms of rate information!
-        currently there is no normalization between channels
-        rate stacking is sliced for index parity with stitch and format 
-        '''
-        if rates == None:   
-            rate_append =[]
-            for i in range(len(self.data['rates'])):
-                rate_append.append(self.data['rates'][i][10:])
-            rates = np.vstack(rate_append)
-        seconds = window
-        fsr = 20
-        tlim = (rates.shape[0]*50)/1000
-        nperseg_rates = int(seconds*fsr)
-        Sxx_list = []
-        for i in range(0,32):
-            f, t, Sxx = signal.spectrogram(rates[:,i], fs = fsr, nperseg = nperseg_rates)
-            Sxx_list.append(Sxx)
-        Sxx_sum = np.sum(Sxx_list, axis=0)
-        if plotting == True:
-            fig, (ax2) = plt.subplots(1, 1, figsize=(10,6))
-            ax2.pcolormesh(t, f, Sxx_sum, cmap = 'terrain', shading='gouraud')
-            ax2.set_ylim([0,10])
-            # ax2.set_xlim([0,tlim])
-            ax2.set_ylabel('Frequency [Hz]')
-            ax2.set_xlabel('Time [sec]')
-            ax2.set_title('spike rate spectrogram')
-        return Sxx_sum, t, f
 
 
     def subsample(self, percent, X=None, Y=None):
@@ -490,10 +463,9 @@ class CortProcessor:
         
         h_sin, r2_sin, test_rates, test_sin, sin_test_index = decode_kfolds(X=full_rates, Y=sin_array, metric_angle=angle_number, vaf_scoring=False)
         h_cos, r2_cos, _, test_cos, _ = decode_kfolds(X=full_rates, Y=cos_array, metric_angle=angle_number, vaf_scoring=False, forced_test_index = sin_test_index)
-        h_atantest, r2_test, _, _, _ = decode_kfolds(X=full_rates, Y=phase_list, metric_angle=angle_number, vaf_scoring=False, forced_test_index = sin_test_index)
         predicted_sin = predicted_lines(test_rates, h_sin)
         predicted_cos = predicted_lines(test_rates, h_cos)
-        order_test = predicted_lines(test_rates, h_atantest)
+        # order_test = predicted_lines(test_rates, h_atantest)
         predicted_arctans = arctan_fn(predicted_sin, predicted_cos)
         test_arctans = phase_list[sin_test_index, :]
         
@@ -501,7 +473,7 @@ class CortProcessor:
         self.h_cos = h_cos
         self.phase_list = phase_list
 
-        return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates, phase_list, order_test, r2_test
+        return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates, phase_list
 
     
     def get_H(self, H):
@@ -939,7 +911,7 @@ class CortProcessor:
         phase_rads = np.radians(phase_list[:,index])
         ratestack = []
         for i in range(len(self.data['rates'])):
-            ratestack.append(self.data['rates'][i][9:-1])
+            ratestack.append(self.data['rates'][i][9:])
         rs_rates = np.vstack(ratestack)
         magn = []
         heading = []
@@ -964,3 +936,200 @@ class CortProcessor:
         return magn, heading
 
 
+    def spectro121map(self, angles, angle_number, window = 4):
+        tsf = np.linspace(0, (angles.shape[0]*50)/1000,angles.shape[0])
+        
+        rate_list = self.data['rates']
+        Sxx_stash = []
+        t_stash = []
+        for i in range(len(rate_list)):
+            rates = rate_list[i][9:,:]
+            Sxx_tmp, t_tmp, f_tmp = self.spectro1(rates, window)
+            if i == 0:
+                f_rates = f_tmp
+            Sxx_stash.append(Sxx_tmp)
+            if i > 0:
+                t_tmp = t_tmp + t_stash[i-1][-1]
+            t_stash.append(t_tmp)
+        Sxx_rates = np.hstack(Sxx_stash)
+        t_rates = np.concatenate(t_stash)
+        
+        seconds = window
+        fs_kin = 20
+        nperseg_kin = int(seconds*fs_kin)
+        f_kin, t_kin, Sxx_kin = signal.spectrogram(angles[:,6], fs = fs_kin, nperseg = nperseg_kin)
+
+        #replace the following with a more analytical extraction of the gait_frequency vairable (via PSD of kin):
+        # gait_frequency = 1.5
+        # gait_upper = gait_frequency + 0.5*gait_frequency
+        # gait_lower = gait_frequency - 0.5*gait_frequency
+        gait_upper = 2.75
+        gait_lower = 1.5
+
+
+        indexes = np.where(np.logical_and(f_rates >= gait_lower, f_rates <= gait_upper))[0]
+        Sxx_stack = np.sum(Sxx_rates[indexes[0]:indexes[-1]+1,:], axis = 0)
+        Sxx_kin_stack = np.sum(Sxx_kin[indexes[0]:indexes[-1]+1,:], axis = 0)
+
+
+        Sxx_stack_volatile = Sxx_stack.copy()
+        Sxx_kin_stack_volatile = Sxx_kin_stack.copy()
+        time_volatile = t_rates.copy()
+        time_volatile2 = t_rates.copy()
+
+        upsampled_Sxx_stack = []
+        for i in range(tsf.shape[0]):
+            if time_volatile.shape[0] > 1:
+                while tsf[i] >= time_volatile[0]:
+                    time_volatile = time_volatile[1:]
+                    Sxx_stack_volatile = Sxx_stack_volatile[1:]
+            upsampled_Sxx_stack.append(Sxx_stack_volatile[0])
+        upsampled_Sxx_stack = np.array(upsampled_Sxx_stack)
+
+        upsampled_kin_Sxx = []
+        for i in range(tsf.shape[0]):
+            if time_volatile2.shape[0] > 1:
+                while tsf[i] >= time_volatile2[0]:
+                    time_volatile2 = time_volatile2[1:]
+                    Sxx_kin_stack_volatile = Sxx_kin_stack_volatile[1:]
+            upsampled_kin_Sxx.append(Sxx_kin_stack_volatile[0])
+        upsampled_kin_Sxx = np.array(upsampled_kin_Sxx)
+
+        return upsampled_Sxx_stack, upsampled_kin_Sxx
+
+
+    def phase_reorganizer(self, limb_phase, upsampled_Sxx_stack, upsampled_kin_Sxx):
+        stitch_rates, stitch_angles = self.stitch_and_format()
+        tsf = np.linspace(0, (limb_phase.shape[0]*50)/1000,limb_phase.shape[0])
+
+        phase_inits = np.where(limb_phase == 0)[0]
+        upsampled_zero_hold = np.zeros(limb_phase.shape[0])
+        random_zero_hold = np.zeros(limb_phase.shape[0])
+        downsampled_zero_hold = np.zeros(phase_inits.shape[0])
+        rolling_window = 1200
+        mean_power = np.squeeze(np.array(pd.DataFrame(upsampled_Sxx_stack).rolling(window=rolling_window).mean()))
+        for i in range(0,rolling_window-1):
+            mean_power[i] = mean_power[rolling_window-1]
+        mean_power_kin = 1.2*np.mean(upsampled_kin_Sxx)
+
+        for i in range(phase_inits.shape[0]):
+            if phase_inits[i] != phase_inits[-1]:
+                gait_power = np.mean(upsampled_Sxx_stack[phase_inits[i]:phase_inits[i+1]])
+                if gait_power >= mean_power[int((phase_inits[i]+phase_inits[i+1])/2)]:
+                    upsampled_zero_hold[phase_inits[i]:phase_inits[i+1]] = 1
+                    downsampled_zero_hold[i] = 1
+            else:
+                gait_power = np.mean(upsampled_Sxx_stack[phase_inits[i]:])
+                if gait_power >= mean_power[phase_inits[i]+int((upsampled_Sxx_stack[phase_inits[i]:].shape[0])/2)]:
+                    upsampled_zero_hold[phase_inits[i]:] = 1
+                    downsampled_zero_hold[i] = 1
+        shuffled_gait_selections = shuffle(downsampled_zero_hold)
+        for i in range(phase_inits.shape[0]):
+            if phase_inits[i] != phase_inits[-1]:
+                if shuffled_gait_selections[i] == 1:
+                    random_zero_hold[phase_inits[i]:phase_inits[i+1]] = 1
+            else:
+                if shuffled_gait_selections[i] == 1:
+                    random_zero_hold[phase_inits[i]:] = 1
+
+        random_rates = []
+        random_angles = []
+        for i in range(random_zero_hold.shape[0]):
+            if random_zero_hold[i] == 1:
+                random_rates.append(stitch_rates[i, :])
+                random_angles.append(stitch_angles[i, :])
+        random_rates = np.array(random_rates)
+        random_angles = np.array(random_angles)
+
+        rebuilt_rates = []
+        rebuilt_angles = []
+        for i in range(upsampled_zero_hold.shape[0]):
+            if upsampled_zero_hold[i] == 1:
+                rebuilt_rates.append(stitch_rates[i, :])
+                rebuilt_angles.append(stitch_angles[i, :])
+        rebuilt_rates = np.array(rebuilt_rates)
+        rebuilt_angles = np.array(rebuilt_angles)
+        return rebuilt_rates, rebuilt_angles, random_rates, random_angles, mean_power
+
+
+    def spectrum_training_selector(self, rates = None, angles = None, metric = 'forelimb'):
+        if rates == None and angles == None:
+                rate_list = self.data['rates']
+                angle_list = self.data['angles']
+                rate_stack =[]
+                for i in range(len(rate_list)):
+                    rate_stack.append(rate_list[i][9:,:])
+                rates = np.vstack(rate_stack)
+
+                angle_stack =[]
+                for i in range(len(angle_list)):
+                    angle_stack.append(angle_list[i][9:,:])
+                angles = np.vstack(angle_stack)
+
+        angle_number = self.data['angle_names'].index(metric)
+
+        
+
+        _, _, first_r2, _, _, _, full_phase_list = self.decode_phase(rates, angles, metric_angle = metric)
+        upsampled_Sxx_stack, upsampled_kin_Sxx = self.spectro121map(angles, angle_number)
+        rebuilt_rates, rebuilt_angles, random_rates, random_angles, mean_power = self.phase_reorganizer(full_phase_list[:,angle_number], upsampled_Sxx_stack, upsampled_kin_Sxx)
+        re_h_sin, re_h_cos, test_r2, re_pred_arctans, re_test_arctans,  re_test_rates, re_full_phase_list  = self.decode_phase(rebuilt_rates, rebuilt_angles, metric_angle = 'forelimb')
+        rand_h_sin, rand_h_cos, control_r2, rand_pred_arctans, rand_test_arctans, rand_test_rates, rand_full_phase_list = self.decode_phase(random_rates, random_angles, metric_angle = 'forelimb')
+        rand_sin = predicted_lines(re_test_rates, rand_h_sin)
+        rand_cos = predicted_lines(re_test_rates, rand_h_cos)
+        rand_re_pred_arctans = arctan_fn(rand_sin, rand_cos)
+        tsf = np.linspace(0, (full_phase_list.shape[0]*50)/1000,full_phase_list.shape[0])
+        mean_power_kin = 1.2*np.mean(upsampled_kin_Sxx)
+        fig4, (ax1, ax2) = plt.subplots(2, 1, figsize=(8,5), sharex=True)
+        ax1.set_title('neural power thresholding')
+        ax1.plot(tsf, upsampled_Sxx_stack)
+        ax1.plot(tsf, mean_power)
+        ax2.set_title('kinematic power thresholding')
+        ax2.plot(tsf, upsampled_kin_Sxx)
+        ax2.axhline(y=mean_power_kin)
+        ax2.set_xlabel('Time [sec]')
+
+        tsre = np.linspace(0, (re_test_arctans.shape[0]*50)/1000,re_test_arctans.shape[0])
+        fig3, (ax0, ax1) = plt.subplots(2, 1, figsize=(8,5),sharex = True)
+        ax0.plot(tsre, rand_re_pred_arctans[:,angle_number], c = 'y')
+        ax0.plot(tsre, re_test_arctans[:,angle_number], c='k')
+        ax0.set_ylabel('forelimb phase')
+        ax0.set_title('randomly selected gait training')
+        ax1.plot(tsre, re_pred_arctans[:,angle_number], c = 'b')
+        ax1.plot(tsre, re_test_arctans[:,angle_number], c='k')
+        ax1.set_ylabel('forelimb phase')
+        ax1.set_title('spectogram selected gait training')
+        ax1.set_xlabel('Time [sec]')
+        fig3.tight_layout()
+
+        print("Initial r2:{} control:{} test:{}".format(first_r2[angle_number], control_r2[angle_number], test_r2[angle_number]))
+
+    def spectro1(self, rates, window=4, plotting = False):
+        '''
+        this makes spectrograms of rate information!
+        currently there is no normalization between channels
+        rate stacking is sliced for index parity with stitch and format 
+        '''
+
+        seconds = window
+        fsr = 20
+        tlim = (rates.shape[0]*50)/1000
+        nperseg_rates = int(seconds*fsr)
+        scaler = MinMaxScaler()
+        Sxx_list = []
+        for i in range(0,32):
+            f, t, Sxx = signal.spectrogram(rates[:,i], fs = fsr, nperseg = nperseg_rates)
+            Sxx_1D = Sxx.reshape([-1,1])
+            Sxx_1D_scaled = scaler.fit_transform(Sxx_1D)
+            Sxx_scaled = Sxx_1D_scaled.reshape(Sxx.shape)
+            Sxx_list.append(Sxx_scaled)
+        Sxx_sum = np.sum(Sxx_list, axis=0)
+        if plotting == True:
+            fig, (ax2) = plt.subplots(1, 1, figsize=(10,6))
+            ax2.pcolormesh(t, f, Sxx_sum, cmap = 'terrain', shading='gouraud')
+            ax2.set_ylim([0,10])
+            # ax2.set_xlim([0,tlim])
+            ax2.set_ylabel('Frequency [Hz]')
+            ax2.set_xlabel('Time [sec]')
+            ax2.set_title('spike rate spectrogram')
+        return Sxx_sum, t, f

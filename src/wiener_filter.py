@@ -35,7 +35,7 @@ def vaf(x,xhat, round_values=True):
 def format_data(x, y, N=10):
     spike_N_lag = []
     emg_N_lag = []
-    for i in range(np.size(x, 0) - N):
+    for i in range(np.size(x, 0) - N + 1):
         temp = x[i:i+N, :]
         temp = temp.reshape((np.size(temp)))
         spike_N_lag.append(temp)
