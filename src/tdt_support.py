@@ -32,15 +32,17 @@ def extract_tdt(tdt_file, npts_file):
 
 
 
-def extract_kin_data(coords_csv, angles_csv):
+def extract_kin_data(coords_csv, angles_csv, phase_csv):
     kin_data = {}
     bp_list, coords = extract_anipose_3d(coords_csv)
     angles_list, angles = extract_anipose_angles(angles_csv)
     fnum = extract_fnum(angles_csv)
+    phase = extract_phase(phase_csv)
     kin_data['bodyparts'] = bp_list
     kin_data['coords'] = coords
     kin_data['angles_list'] = angles_list
     kin_data['angles'] = angles
+    kin_data['phase'] = phase
     kin_data['fnum'] = fnum
 
     return kin_data
@@ -107,6 +109,13 @@ def extract_fnum(csv):
     frame_list = np.array(df).T
 
     return frame_list
+
+def extract_phase(csv):
+    df = pd.read_csv(csv)
+    df = df.iloc[:,df.columns.get_loc('classification')]
+    phase_list = np.array(df).T
+
+    return phase_list
 
 def deprec_crop_data(tdt_data, kinematics, np_ts, crop=(0,70)):
     #add in start_time/end_time in video, output cropped cortical/kin data

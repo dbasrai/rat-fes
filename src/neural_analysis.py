@@ -50,7 +50,39 @@ def autothreshold_crossings(neural, multiplier): #this finds all upwards thresho
 
     return np.array(spikes).T #samples x spikes
 
-def threshold_crossings_refrac(neural, fs, multiplier, wind):  # (negative peaks only)
+
+def static_threshold_crossings(neural, thresholds, multiplier): #this finds all upwards threshold crossings, no artifact detection
+    neural = neural.T
+
+    polarity=True #if threshold is positive
+    if multiplier < 0:
+        polarity=False
+    spikes = []
+    
+    for i in range(neural.shape[0]):
+        if polarity:
+            crossings = np.diff(neural[i,:] > thresholds[i], prepend=0) #we get a 1
+            #right when it crosses. then 0s until it comes back/crosses again
+        else:
+            crossings = np.diff(neural[i,:] < thresholds[i], prepend=0)
+
+        np.put(crossings, np.where(crossings==-1), 0) #only catch crossing
+        spikes.append(crossings)
+
+    return np.array(spikes).T #samples x spikes
+
+def get_thresholds(neural, multiplier):
+    neural = neural.T
+    thresholds = []
+    
+    for channel in neural:
+        std = np.std(channel)
+        threshold = multiplier * std
+        thresholds.append(threshold)
+
+    return np.array(thresholds).T #samples x spikes
+
+def rolling_threshold_crossings(neural, fs, multiplier, wind):  # (negative peaks only)
     neural = neural.T
     refrac = 0.0005
     spikes_tmp = []

@@ -5,6 +5,7 @@ class FolderHandler:
         self.folder_path = folder_path
         self.angles_list = self.get_angles_list()
         self.coords_list = self.get_coords_list()
+        self.phase_list = self.get_phase_list()
         self.tdt_list, self.ts_list = self.get_tdt_ts_paths()
         #TODO add checks
 
@@ -86,6 +87,22 @@ class FolderHandler:
                 sorted(zip(time_list, unsorted))]
  
         return coords_path_list
+    
+    def get_phase_list(self):
+        phase_path = f'{self.folder_path}/phase'
+        unsorted = []
+        time_list = []
+
+        for file_name in os.listdir(phase_path):
+            if file_name.endswith('.csv'):
+                subject_name = file_name.split('_')[1]
+                time_list.append(subject_name.split('-')[-1]) 
+                unsorted.append(f'{phase_path}/{file_name}')
+
+        phase_path_list = [unsorted for _, unsorted in
+                sorted(zip(time_list, unsorted))]
+ 
+        return phase_path_list
     
     def deprec_get_ts_list(self):
 

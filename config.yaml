@@ -1,0 +1,106 @@
+    # Project definitions (do not edit)
+Task: rollie
+scorer: Grant
+date: Dec30
+multianimalproject: false
+identity:
+
+    # Project path (change when moving around)
+project_path: /home/gae3742/fes-analysis/dlc-models/partial-recovery-model
+
+    # Annotation data set configuration (and individual video cropping parameters)
+video_sets:
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam1_rollie1129-221129-122753_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam2_rollie1129-221129-122753_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam1_rollie1129-221129-124146_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam2_rollie1129-221129-124146_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam1_rollie1209-221209-175033_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam2_rollie1209-221209-175033_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam1_rollie1209-221209-175939_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam2_rollie1209-221209-175939_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam1_rollie1209-221209-180540_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam2_rollie1209-221209-180540_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam1_rollie1216-221216-161554_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam2_rollie1216-221216-161554_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam1_rollie1216-221216-162931_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam2_rollie1216-221216-162931_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam1_rollie1220-221220-153608_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam2_rollie1220-221220-153608_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam1_rollie1220-221220-154950_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+  C:\oobootoo\rat-fes\data\deeplabcut\rollie-Grant-2022-12-30\videos\cam2_rollie1220-221220-154950_200f-11e100g.avi:
+    crop: 0, 872, 0, 302
+bodyparts:
+- toe
+- MTP
+- ankle
+- knee
+- pelvis bottom
+- hip
+- pelvis top
+- finger
+- knuckle
+- wrist
+- elbow
+- shoulder
+- scapula
+- x1
+- x2
+- y1
+- y2
+
+    # Fraction of video to start/stop when extracting frames for labeling/refinement
+start: 0
+stop: 1
+numframes2pick: 12
+
+    # Plotting configuration
+skeleton:
+- - bodypart1
+  - bodypart2
+- - objectA
+  - bodypart3
+skeleton_color: black
+pcutoff: 0.6
+dotsize: 6
+alphavalue: 0.7
+colormap: rainbow
+
+    # Training,Evaluation and Analysis configuration
+TrainingFraction:
+- 0.95
+iteration: 0
+default_net_type: resnet_50
+default_augmenter: default
+snapshotindex: -1
+batch_size: 8
+
+    # Cropping Parameters (for analysis and outlier frame detection)
+cropping: false
+    #if cropping is true for analysis, then set the values here:
+x1: 0
+x2: 640
+y1: 277
+y2: 624
+
+    # Refinement configuration (parameters from annotation dataset configuration also relevant in this stage)
+corner2move2:
+- 50
+- 50
+move2corner: true

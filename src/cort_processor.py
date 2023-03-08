@@ -13,9 +13,11 @@ from src.phase_decoder_support import *
 from sklearn.metrics import r2_score
 from sklearn.utils import shuffle
 from scipy.signal import resample, find_peaks
+from scipy.stats import mode
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import MinMaxScaler
 import scipy.io as sio
+import numpy as np
 import pandas as pd
 import cv2
 import copy
@@ -116,7 +118,7 @@ class CortProcessor:
     def extract_data(self):
         '''
         this is called when a CortProcessor is initialized.
-        It extracts raw neuiral,raw angles, and raw coords
+        It extracts raw neural,raw angles, and raw coords
         neural data is saved under CortProcessr.tdt_data
         kinematic data is saved under CortProcessor.kin_data
 
@@ -133,14 +135,14 @@ class CortProcessor:
 
         raw_coords_list = self.handler.coords_list
         raw_angles_list = self.handler.angles_list
-        
+        raw_phase_list = self.handler.phase_list
         for i in range(len(raw_coords_list)):
             kin_data_list.append(extract_kin_data(raw_coords_list[i],
-                raw_angles_list[i]))
+                raw_angles_list[i], raw_phase_list[i]))
 
         return tdt_data_list, kin_data_list
 
-    def process(self, manual_crop_list=None, threshold_multiplier = -3.0, window = 15, binsize = 0.05, clear_storage = True):
+    def process(self, manual_crop_list=None, threshold_multiplier = -3.0, window = 60, binsize = 0.05, clear_storage = True):
         """
         1) takes raw neural data, then bandpass+notch filters, then extracts
         spikes using threshold_multiplier, then bins into firing rates with bin
@@ -170,6 +172,8 @@ class CortProcessor:
         self.data['rates']=[]
         self.data['coords']=[]
         self.data['angles']=[]
+        self.data['phase'] = []
+                
         for i in range(len(tdt_data_list)):
             #syncs neural data/kinematic data, then crops
             self.tdt_data[i], self.kin_data[i] = self.crop_data(tdt_data_list[i], 
@@ -192,24 +196,33 @@ class CortProcessor:
             filtered_neural = notch_filter(half_filtered_neural, fs)
             clean_filtered_neural = remove_artifacts(filtered_neural, fs)
             
-            #extract spike, impose refeactory limit (post artifact rejection) and bin
-            spikes_tmp = threshold_crossings_refrac(clean_filtered_neural, fs,
+            #extract spikes with rolling window stdv
+            spikes = rolling_threshold_crossings(clean_filtered_neural, fs,
                     threshold_multiplier, window)
-            spikes = refractory_limit(spikes_tmp, fs)
             firing_rates = spike_binner(spikes, fs, binsize)
             
+            #old processing method
+            # spikes = autothreshold_crossings(clean_filtered_neural,
+            #         threshold_multiplier)
+            # firing_rates = spike_binner(spikes, fs, binsize)
+                                
             self.data['rates'].append(firing_rates)
 
             temp_angles = self.kin_data[i]['angles'] #quick accessible variable
             temp_coords = self.kin_data[i]['coords'] 
+            temp_phase = self.kin_data[i]['phase'] 
+            
 
             #resample at same frequency of binned spikes
             resampled_angles = resample(temp_angles, firing_rates.shape[0],
                     axis=0)
             resampled_coords = resample(temp_coords, firing_rates.shape[0],
                     axis=0)
+            resampled_phase = self.resample_mode(temp_phase, firing_rates.shape[0])
+                
             self.data['angles'].append(resampled_angles)
             self.data['coords'].append(resampled_coords)
+            self.data['phase'].append(resampled_phase)
 
             #remove raw data to save memory
             if clear_storage == True:
@@ -218,7 +231,13 @@ class CortProcessor:
             gc.collect()
         
         #returning stitched rates --- we don't directly use this for anything.     
-        return np.vstack(self.data['rates']), np.vstack(self.data['angles'])
+        return np.vstack(self.data['rates']), np.vstack(self.data['angles']), np.hstack(self.data['phase'])
+    
+    def resample_mode(self, phase, shape):
+        re = resample(phase, shape, axis=0)
+        for i in range(re.shape[0]):
+            re[i] = int(np.round(re[i]))
+        return re
 
     def process_toe_height(self):
         """
@@ -297,10 +316,12 @@ class CortProcessor:
 
         temp_coords = kin_data['coords']
         temp_angles = kin_data['angles']
+        temp_phase = kin_data['phase']
         temp_frames = kin_data['fnum']
 
         crop_kin_datafile['coords'] = temp_coords[kin_start:kin_end,:,:]
         crop_kin_datafile['angles'] = temp_angles[kin_start:kin_end,:]
+        crop_kin_datafile['phase'] = temp_phase[kin_start:kin_end]        
         crop_kin_datafile['fnum'] = temp_frames[kin_start:kin_end]
         
         #maybe need edge-case if only single angle/bodypart
@@ -408,8 +429,8 @@ class CortProcessor:
 
             metric = self.angle_name_helper(metric_angle)
 
-            h_angle, vaf_array, final_test_x, final_test_y = decode_kfolds(X,Y,
-                    metric=metric)
+            h_angle, vaf_array, final_test_x, final_test_y, _ = decode_kfolds(X,Y,
+                    metric_angle=metric)
             
             self.h_angle = h_angle
             return h_angle, vaf_array, final_test_x, final_test_y
@@ -495,288 +516,6 @@ class CortProcessor:
         response = impulse_response(AOI, h_mat, phase_list, plotting)
         return response
 
-    def get_gait_indices(self, Y=None, metric_angle='limbfoot'):
-        if Y is None:
-            Y_ = self.data['angles']
-        else:
-            Y_=Y
-            assert isinstance(Y, list), 'Y must be a list'
-
-        gait_indices = []
-        samples_list = []
-
-        angle_number = self.angle_name_helper(metric_angle)
-
-        for angle in Y_:
-            peaks= tailored_peaks(angle, angle_number,metric_angle)
-
-            gait_indices.append(peaks)
-            samples_list.append(np.diff(peaks))
-
-        if len(samples_list)>1:
-            samples = np.concatenate(samples_list)
-        else:
-            samples = samples_list[0]
-	
-        avg_gait_samples = int(np.round(np.average(samples)))
-        
-        if Y is None:
-            self.gait_indices = gait_indices
-            self.avg_gait_samples = avg_gait_samples
-
-
-        return gait_indices, avg_gait_samples		
-			 
-        
-
-        
-    def deprec_get_gait_indices(self, Y=None, metric_angle='limbfoot'):
-        '''
-        This takes a kinematic variable, and returns indices where each peak is
-        found. It also returns the average number of samples between each
-        peaks. 
-
-        If passing in without parameter, it uses the 3rd angle measurement,
-        which is usually the limbfoot angle. 
-
-        This is mainly used as a starter method for other method.
-        Divide_into_gaits for instance takes in these indices, and divides both
-        the kinematics and rates into gait cycles.
-        '''
-        if Y is None:
-            Y_ = self.data['angles']
-        else:
-            assert isinstance(Y, list), 'Y must be a list'
-            Y_=Y
-
-        angle_number = self.angle_name_helper(metric_angle)
-
-        gait_indices = []
-        samples_list = []
-        for angle in Y_:
-            if angle.ndim > 1:
-                angle = angle[:, angle_number]
-            temp_peaks, nada = find_peaks(angle, prominence=10, distance=5)
-            avg_ = np.average(angle[temp_peaks])
-            std_ = np.std(angle[temp_peaks])
-
-
-            temp2_peaks = temp_peaks[np.argwhere(angle[temp_peaks] < avg_ +
-                30)]
-            temp2_peaks = np.squeeze(temp2_peaks)
-            peaks = temp2_peaks[np.argwhere(angle[temp2_peaks] > avg_ -
-                30)]
-            peaks = np.squeeze(peaks)
-            peaks = np.append(peaks, np.size(angle)-1)
-            peaks = np.insert(peaks, 0, 0)
-            gait_indices.append(peaks)
-            samples_list.append(np.diff(peaks))
-
-        
-        if len(samples_list) > 1:
-            samples = np.concatenate(samples_list)
-        else:
-            samples = samples_list[0]
-
-        avg_gait_samples = int(np.round(np.average(samples)))
-        
-        if Y is None:
-            self.gait_indices = gait_indices
-            self.avg_gait_samples = avg_gait_samples
-
-        return gait_indices, avg_gait_samples
-    
-    def divide_into_gaits(self, X=None, Y=None, gait_indices=None,
-            avg_gait_samples=None,
-            bool_resample=True):
-        '''
-        this takes in X, which is usually rates, Y which is usually some
-        kinematic variable, and indices, which tell you how to divide up the
-        data, and divides all the data up as lists. Since the originall X is
-        already a list, it returns a list of list of lists. Confusing?
-        
-        if you don't pass any parameters, then get_gait_indices must be run
-        first. This finds gait_indices/avg_gait_samples using limbfoot angle.
-
-        If you don't pass in X/Y paramters, it by default uses rates and
-        angles, and then divides em up.
-        '''
-       
-        if gait_indices is None:
-            gait_indices = self.gait_indices
-        
-        if avg_gait_samples is None:
-            avg_gait_samples = self.avg_gait_samples 
-
-        if X is None:
-            rates = self.data['rates']
-        else:
-            assert isinstance(X, list), 'X must be a list'
-            rates = X
-
-        if Y is None:
-            angles = self.data['angles']
-        else:
-            assert isinstance(Y, list), 'Y must be a list'
-            angles = Y
-
-        X_gait = []
-        Y_gait = []
-
-        for i, trial_gait_index in enumerate(gait_indices):
-            trial_rate_gait = []
-            trial_angle_gait = []
-            for j in range(np.size(trial_gait_index)-1):
-                end = trial_gait_index[j+1]
-                start = trial_gait_index[j]
-
-                temp_rate = rates[i][start:end,:]
-                temp_angle = angles[i][start:end,:]
-
-                if bool_resample:
-                    temp_rate = resample(temp_rate, avg_gait_samples, axis=0)
-                    temp_angle = resample(temp_angle, avg_gait_samples, axis=0)
-                
-                trial_rate_gait.append(temp_rate)
-                trial_angle_gait.append(temp_angle)
-            X_gait.append(trial_rate_gait)
-            Y_gait.append(trial_angle_gait)
-        
-        if bool_resample:
-            X_gait = np.array(X_gait)
-            Y_gait = np.array(Y_gait)
-
-        if X is None:
-            self.rates_gait = X_gait
-        if Y is None:
-            self.angles_gait = Y_gait 
-
-        return X_gait, Y_gait #return list of list of lists lol
-
-    def toe_to_stance_swing(self, toe_height):
-        peaks, _ = find_peaks(toe_height, height=12)
-        peaks = np.append(peaks, np.size(toe_height))
-        peaks = np.insert(peaks, 0, 0)
-        ss_list = []
-
-        for i in range(np.size(peaks)-1):
-            end=peaks[i+1]
-            start=peaks[i]
-
-            gait = toe_height[start:end]
-            dx = np.gradient(gait)
-            ddx = np.gradient(dx)
-
-            ddx_peaks, _ = find_peaks(ddx, height=0.02)
-            if np.size(ddx_peaks) == 2:
-                ss = np.ones(np.size(gait), dtype=bool)
-                ss[ddx_peaks[0]:ddx_peaks[1]] = 0
-            else:
-                minny = np.amin(gait)
-                ss = gait>minny+2
-
-            ss_list.append(ss)
-
-        stance_swing = np.hstack(ss_list)
-        return stance_swing
-
-
-
-    def get_stance_swing(self):
-        if self.data['toe_height'] is None:
-            output = 'run process toe height first'
-
-        toe_list = self.data['toe_height']
-        stance_swing_list = []
-
-        for toe in toe_list:
-            stance_swing_list.append(self.toe_to_stance_swing(toe))
-
-
-        rates = self.data['rates']
-
-        X, Y = self.stitch_and_format(rates, stance_swing_list)
-        return X, Y
-
-
-
-    def remove_bad_gaits(self, X=None, Y=None, gait_indices=None,
-            avg_gait_samples = None, bool_resample=True):
-        '''
-        similar to divide into gaits, but instead of just dividing, it also
-        removes any gait cycles that have a much smaller or much larger amount
-        of samples. in a sense it divies up gaits and removes bad ones.
-
-        must run get gait indices first!
-        '''
-        if gait_indices is None:
-            gait_indices = self.gait_indices
-            #print(self.gait_indices)
-        
-        if avg_gait_samples is None:
-            avg_gait_samples = self.avg_gait_samples
- 
-        if X is None:
-            rates = self.data['rates']
-        elif isinstance(X, list):
-            rates = X
-        else: 
-            print('X must be list')
-            return
-
-
-        if Y is None:
-            angles = self.data['angles']
-        elif isinstance(Y, list):
-            angles = Y
-        else:
-            print('Y must be list')
-            return
-
-       
-        #above = slow gait cycles, below = too fast gait cycles 
-        above = 1.33 * avg_gait_samples
-        below = .66 * avg_gait_samples
-        bads_list = []
-        for idx in gait_indices:
-            #we are iterating and adding to a list any too slow or fast gaits
-            bad_above = np.argwhere(np.diff(idx)>above)
-            bad_below = np.argwhere(np.diff(idx)<below)
-
-            bads_list.append(np.squeeze(np.concatenate((bad_above,
-                bad_below))).tolist())
-            #bad_list now has all the indices of bad gait cycles!
-        proc_rates = []
-        proc_angles = []
-        for i, trial_indices in enumerate(gait_indices):
-            #trial_rate_gait = []
-            #trial_angle_gait = []
-            for j in range(np.size(trial_indices)-1):
-                if j in bads_list[i]:
-                    #skip if its a bad gait cycle!
-                    continue
-                else:
-                    end = trial_indices[j+1]
-                    start = trial_indices[j]
-
-                    temp_rate = rates[i][start:end,:]
-                    temp_angle = angles[i][start:end,:]
-
-                    low_number_check = temp_angle[:,6] > 100
-                    if False in low_number_check:
-                        continue
-                    if bool_resample:
-                        temp_rate = resample(temp_rate, avg_gait_samples, axis=0)
-                        temp_angle = resample(temp_angle, avg_gait_samples, axis=0)
-                    proc_rates.append(temp_rate)
-                    proc_angles.append(temp_angle)
- 
-            #proc_rates.append(trial_rate_gait)
-            #proc_angles.append(trial_angle_gait)
-        
-        return np.vstack(proc_rates), np.vstack(proc_angles)
-                
- 
 
     def neuron_tuning(self, rates_gait=None):
         '''
@@ -799,23 +538,7 @@ class CortProcessor:
             print(e)
             print('make sure you run divide into gaits first')
 
-    def convert_to_phase(self, gait_indices = None):
-        '''
-        this is still TODO. might already work, but double check this
-        '''
-        #TODO
-        phase_list = []
-        
-        if gait_indices is None:
-            gait_indices = self.gait_indices
-        for i in range(np.size(gait_indices)-1):
-            end = gait_indices[i+1]
-            start = gait_indices[i]
-            phase = np.sin(np.linspace(0.0, 2.0*math.pi, num=end-start, 
-                endpoint=False))
-            phase_list.append(gait)
-        
-        return phase_list #use np.hstack on output to get continuous
+    
 
     def apply_PCA(self, dims=None, X=None, transformer=None):
         '''
@@ -898,238 +621,4 @@ class CortProcessor:
     def bodypart_helper(self, bodypart):
         return self.data['bodyparts'].index(bodypart)
     
-    def DOM(self, angle_name='knee', plotting=True):
-        index = self.data['angle_names'].index(angle_name)
-        phase_list = []  
-        _, full_angles = self.stitch_and_format(self.data['rates'], 
-                        self.data['angles'])
-        for i in range(full_angles.shape[1]):
-            peak_list = tailored_peaks(full_angles, i, self.data['angle_names'][i])
-            phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
-            phase_list.append(phase_list_tmp)
-        phase_list = np.array(phase_list).T
-        phase_rads = np.radians(phase_list[:,index])
-        ratestack = []
-        for i in range(len(self.data['rates'])):
-            ratestack.append(self.data['rates'][i][9:])
-        rs_rates = np.vstack(ratestack)
-        magn = []
-        heading = []
-        for j in range(rs_rates.shape[1]):
-            sum1 = 0
-            sum_sin = 0
-            sum_cos = 0
-            for i in range(rs_rates.shape[0]):
-                sum1 = sum1 + rs_rates[i,j]
-                sum_sin = sum_sin + rs_rates[i,j]*np.sin(phase_rads[i])
-                sum_cos = sum_cos + rs_rates[i,j]*np.cos(phase_rads[i])
-            sin_bar = sum_sin/sum1
-            cos_bar = sum_cos/sum1
-            r = (sin_bar**2 + cos_bar**2)**(1/2)
-            theta = np.arctan2(sin_bar, cos_bar)
-            magn.append(r)
-            heading.append(theta)
-        magn = np.array(magn)
-        heading = np.array(heading)
-        if plotting == True:
-            compass(heading, magn)
-        return magn, heading
-
-
-    def spectro121map(self, angles, angle_number, window = 4):
-        tsf = np.linspace(0, (angles.shape[0]*50)/1000,angles.shape[0])
-        
-        rate_list = self.data['rates']
-        Sxx_stash = []
-        t_stash = []
-        for i in range(len(rate_list)):
-            rates = rate_list[i][9:,:]
-            Sxx_tmp, t_tmp, f_tmp = self.spectro1(rates, window)
-            if i == 0:
-                f_rates = f_tmp
-            Sxx_stash.append(Sxx_tmp)
-            if i > 0:
-                t_tmp = t_tmp + t_stash[i-1][-1]
-            t_stash.append(t_tmp)
-        Sxx_rates = np.hstack(Sxx_stash)
-        t_rates = np.concatenate(t_stash)
-        
-        seconds = window
-        fs_kin = 20
-        nperseg_kin = int(seconds*fs_kin)
-        f_kin, t_kin, Sxx_kin = signal.spectrogram(angles[:,6], fs = fs_kin, nperseg = nperseg_kin)
-
-        #replace the following with a more analytical extraction of the gait_frequency vairable (via PSD of kin):
-        # gait_frequency = 1.5
-        # gait_upper = gait_frequency + 0.5*gait_frequency
-        # gait_lower = gait_frequency - 0.5*gait_frequency
-        gait_upper = 2.75
-        gait_lower = 1.5
-
-
-        indexes = np.where(np.logical_and(f_rates >= gait_lower, f_rates <= gait_upper))[0]
-        Sxx_stack = np.sum(Sxx_rates[indexes[0]:indexes[-1]+1,:], axis = 0)
-        Sxx_kin_stack = np.sum(Sxx_kin[indexes[0]:indexes[-1]+1,:], axis = 0)
-
-
-        Sxx_stack_volatile = Sxx_stack.copy()
-        Sxx_kin_stack_volatile = Sxx_kin_stack.copy()
-        time_volatile = t_rates.copy()
-        time_volatile2 = t_rates.copy()
-
-        upsampled_Sxx_stack = []
-        for i in range(tsf.shape[0]):
-            if time_volatile.shape[0] > 1:
-                while tsf[i] >= time_volatile[0]:
-                    time_volatile = time_volatile[1:]
-                    Sxx_stack_volatile = Sxx_stack_volatile[1:]
-            upsampled_Sxx_stack.append(Sxx_stack_volatile[0])
-        upsampled_Sxx_stack = np.array(upsampled_Sxx_stack)
-
-        upsampled_kin_Sxx = []
-        for i in range(tsf.shape[0]):
-            if time_volatile2.shape[0] > 1:
-                while tsf[i] >= time_volatile2[0]:
-                    time_volatile2 = time_volatile2[1:]
-                    Sxx_kin_stack_volatile = Sxx_kin_stack_volatile[1:]
-            upsampled_kin_Sxx.append(Sxx_kin_stack_volatile[0])
-        upsampled_kin_Sxx = np.array(upsampled_kin_Sxx)
-
-        return upsampled_Sxx_stack, upsampled_kin_Sxx
-
-
-    def phase_reorganizer(self, limb_phase, upsampled_Sxx_stack, upsampled_kin_Sxx):
-        stitch_rates, stitch_angles = self.stitch_and_format()
-        tsf = np.linspace(0, (limb_phase.shape[0]*50)/1000,limb_phase.shape[0])
-
-        phase_inits = np.where(limb_phase == 0)[0]
-        upsampled_zero_hold = np.zeros(limb_phase.shape[0])
-        random_zero_hold = np.zeros(limb_phase.shape[0])
-        downsampled_zero_hold = np.zeros(phase_inits.shape[0])
-        rolling_window = 1200
-        mean_power = np.squeeze(np.array(pd.DataFrame(upsampled_Sxx_stack).rolling(window=rolling_window).mean()))
-        for i in range(0,rolling_window-1):
-            mean_power[i] = mean_power[rolling_window-1]
-        mean_power_kin = 1.2*np.mean(upsampled_kin_Sxx)
-
-        for i in range(phase_inits.shape[0]):
-            if phase_inits[i] != phase_inits[-1]:
-                gait_power = np.mean(upsampled_Sxx_stack[phase_inits[i]:phase_inits[i+1]])
-                if gait_power >= mean_power[int((phase_inits[i]+phase_inits[i+1])/2)]:
-                    upsampled_zero_hold[phase_inits[i]:phase_inits[i+1]] = 1
-                    downsampled_zero_hold[i] = 1
-            else:
-                gait_power = np.mean(upsampled_Sxx_stack[phase_inits[i]:])
-                if gait_power >= mean_power[phase_inits[i]+int((upsampled_Sxx_stack[phase_inits[i]:].shape[0])/2)]:
-                    upsampled_zero_hold[phase_inits[i]:] = 1
-                    downsampled_zero_hold[i] = 1
-        shuffled_gait_selections = shuffle(downsampled_zero_hold)
-        for i in range(phase_inits.shape[0]):
-            if phase_inits[i] != phase_inits[-1]:
-                if shuffled_gait_selections[i] == 1:
-                    random_zero_hold[phase_inits[i]:phase_inits[i+1]] = 1
-            else:
-                if shuffled_gait_selections[i] == 1:
-                    random_zero_hold[phase_inits[i]:] = 1
-
-        random_rates = []
-        random_angles = []
-        for i in range(random_zero_hold.shape[0]):
-            if random_zero_hold[i] == 1:
-                random_rates.append(stitch_rates[i, :])
-                random_angles.append(stitch_angles[i, :])
-        random_rates = np.array(random_rates)
-        random_angles = np.array(random_angles)
-
-        rebuilt_rates = []
-        rebuilt_angles = []
-        for i in range(upsampled_zero_hold.shape[0]):
-            if upsampled_zero_hold[i] == 1:
-                rebuilt_rates.append(stitch_rates[i, :])
-                rebuilt_angles.append(stitch_angles[i, :])
-        rebuilt_rates = np.array(rebuilt_rates)
-        rebuilt_angles = np.array(rebuilt_angles)
-        return rebuilt_rates, rebuilt_angles, random_rates, random_angles, mean_power
-
-
-    def spectrum_training_selector(self, rates = None, angles = None, metric = 'forelimb'):
-        if rates == None and angles == None:
-                rate_list = self.data['rates']
-                angle_list = self.data['angles']
-                rate_stack =[]
-                for i in range(len(rate_list)):
-                    rate_stack.append(rate_list[i][9:,:])
-                rates = np.vstack(rate_stack)
-
-                angle_stack =[]
-                for i in range(len(angle_list)):
-                    angle_stack.append(angle_list[i][9:,:])
-                angles = np.vstack(angle_stack)
-
-        angle_number = self.data['angle_names'].index(metric)
-
-        
-
-        _, _, first_r2, _, _, _, full_phase_list = self.decode_phase(rates, angles, metric_angle = metric)
-        upsampled_Sxx_stack, upsampled_kin_Sxx = self.spectro121map(angles, angle_number)
-        rebuilt_rates, rebuilt_angles, random_rates, random_angles, mean_power = self.phase_reorganizer(full_phase_list[:,angle_number], upsampled_Sxx_stack, upsampled_kin_Sxx)
-        re_h_sin, re_h_cos, test_r2, re_pred_arctans, re_test_arctans,  re_test_rates, re_full_phase_list  = self.decode_phase(rebuilt_rates, rebuilt_angles, metric_angle = 'forelimb')
-        rand_h_sin, rand_h_cos, control_r2, rand_pred_arctans, rand_test_arctans, rand_test_rates, rand_full_phase_list = self.decode_phase(random_rates, random_angles, metric_angle = 'forelimb')
-        rand_sin = predicted_lines(re_test_rates, rand_h_sin)
-        rand_cos = predicted_lines(re_test_rates, rand_h_cos)
-        rand_re_pred_arctans = arctan_fn(rand_sin, rand_cos)
-        tsf = np.linspace(0, (full_phase_list.shape[0]*50)/1000,full_phase_list.shape[0])
-        mean_power_kin = 1.2*np.mean(upsampled_kin_Sxx)
-        fig4, (ax1, ax2) = plt.subplots(2, 1, figsize=(8,5), sharex=True)
-        ax1.set_title('neural power thresholding')
-        ax1.plot(tsf, upsampled_Sxx_stack)
-        ax1.plot(tsf, mean_power)
-        ax2.set_title('kinematic power thresholding')
-        ax2.plot(tsf, upsampled_kin_Sxx)
-        ax2.axhline(y=mean_power_kin)
-        ax2.set_xlabel('Time [sec]')
-
-        tsre = np.linspace(0, (re_test_arctans.shape[0]*50)/1000,re_test_arctans.shape[0])
-        fig3, (ax0, ax1) = plt.subplots(2, 1, figsize=(8,5),sharex = True)
-        ax0.plot(tsre, rand_re_pred_arctans[:,angle_number], c = 'y')
-        ax0.plot(tsre, re_test_arctans[:,angle_number], c='k')
-        ax0.set_ylabel('forelimb phase')
-        ax0.set_title('randomly selected gait training')
-        ax1.plot(tsre, re_pred_arctans[:,angle_number], c = 'b')
-        ax1.plot(tsre, re_test_arctans[:,angle_number], c='k')
-        ax1.set_ylabel('forelimb phase')
-        ax1.set_title('spectogram selected gait training')
-        ax1.set_xlabel('Time [sec]')
-        fig3.tight_layout()
-
-        print("Initial r2:{} control:{} test:{}".format(first_r2[angle_number], control_r2[angle_number], test_r2[angle_number]))
-
-    def spectro1(self, rates, window=4, plotting = False):
-        '''
-        this makes spectrograms of rate information!
-        currently there is no normalization between channels
-        rate stacking is sliced for index parity with stitch and format 
-        '''
-
-        seconds = window
-        fsr = 20
-        tlim = (rates.shape[0]*50)/1000
-        nperseg_rates = int(seconds*fsr)
-        scaler = MinMaxScaler()
-        Sxx_list = []
-        for i in range(0,32):
-            f, t, Sxx = signal.spectrogram(rates[:,i], fs = fsr, nperseg = nperseg_rates)
-            Sxx_1D = Sxx.reshape([-1,1])
-            Sxx_1D_scaled = scaler.fit_transform(Sxx_1D)
-            Sxx_scaled = Sxx_1D_scaled.reshape(Sxx.shape)
-            Sxx_list.append(Sxx_scaled)
-        Sxx_sum = np.sum(Sxx_list, axis=0)
-        if plotting == True:
-            fig, (ax2) = plt.subplots(1, 1, figsize=(10,6))
-            ax2.pcolormesh(t, f, Sxx_sum, cmap = 'terrain', shading='gouraud')
-            ax2.set_ylim([0,10])
-            # ax2.set_xlim([0,tlim])
-            ax2.set_ylabel('Frequency [Hz]')
-            ax2.set_xlabel('Time [sec]')
-            ax2.set_title('spike rate spectrogram')
-        return Sxx_sum, t, f
+    
