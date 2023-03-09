@@ -11,28 +11,44 @@ from matplotlib.pyplot import cm
 from scipy import signal
 import scipy.stats as stats
 
+
+# some commented functions serve as multi-dinemsional alternatives to thoe currently i use (should one ever wish to use fore and hind limb phase)
+
+# def arctan_fn(predicted_sin, predicted_cos):   
+#     arctans = []
+#     for i in range(predicted_sin.shape[1]):
+#         arctan = np.arctan2(predicted_sin[:,i],predicted_cos[:,i])
+#         arctan_angles = np.degrees(arctan) + 180
+#         arctans.append(arctan_angles)
+#     arctans = np.array(arctans).T
+#     return arctans
+
 def arctan_fn(predicted_sin, predicted_cos):   
-    arctans = []
-    for i in range(predicted_sin.shape[1]):
-        arctan = np.arctan2(predicted_sin[:,i],predicted_cos[:,i])
-        arctan_angles = np.degrees(arctan) + 180
-        arctans.append(arctan_angles)
-    arctans = np.array(arctans).T
-    return arctans
+    arctan = np.arctan2(predicted_sin,predicted_cos)
+    arctan_angles = np.degrees(arctan) + 180
+    return arctan_angles
+
+# def sine_and_cosine(phase_list):
+#     phase_list = np.radians(phase_list - 180)
+#     sin_array = []
+#     cos_array = []
+#     for i in range(phase_list.shape[1]):
+#         sin = np.sin(phase_list[:,i])
+#         cos = np.cos(phase_list[:,i])
+#         sin_array.append(sin)
+#         cos_array.append(cos)
+#     sin_array = np.array(sin_array).T
+#     cos_array = np.array(cos_array).T
+#     return sin_array, cos_array
+
 
 def sine_and_cosine(phase_list):
     phase_list = np.radians(phase_list - 180)
-    sin_array = []
-    cos_array = []
-    for i in range(phase_list.shape[1]):
-        sin = np.sin(phase_list[:,i])
-        cos = np.cos(phase_list[:,i])
-        sin_array.append(sin)
-        cos_array.append(cos)
-    sin_array = np.array(sin_array).T
-    cos_array = np.array(cos_array).T
+    sin_array = np.sin(phase_list)
+    cos_array = np.cos(phase_list)
     return sin_array, cos_array
     
+
 def predicted_lines(actual, H):
     holding_array = []
     for ii in range(H.shape[1]):
@@ -40,6 +56,7 @@ def predicted_lines(actual, H):
         holding_array.append(temp1)
     holding_array = np.array(holding_array).T
     return holding_array
+    
     
 def to_phasex(peaks, angles):
     for i in range(0,peaks.shape[0]-1):

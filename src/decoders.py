@@ -58,28 +58,65 @@ def decode_kfolds(X, Y, metric_angle, k=10, preset_h=None, vaf_scoring=True, for
     return best_h, np.average(vaf_array, 1), final_test_x, final_test_y, final_test_index
 
 
-
-def decode_kfolds_single(X, Y, k=10):
+def decode_kfolds_single(X, Y, k=10, preset_h=None, scoring='R2', forced_test_index = None):
     kf = KFold(n_splits=k)
-    index=0
-    best_vaf=-1
+    best_vaf=-1000000
     vaf_average = []
     for train_index, test_index in kf.split(X):
         train_x, test_x = X[train_index, :], X[test_index,:]
         train_y, test_y = Y[train_index], Y[test_index]
-
-        h=train_wiener_filter(train_x, train_y)
+        if preset_h is None:
+            h=train_wiener_filter(train_x, train_y)
+        else:
+            h=preset_h
         predic_y = test_wiener_filter(test_x, h)
-        vaf_average.append(vaf(test_y, predic_y))
-
+    
+        if scoring=='R2':
+            vaf_average.append(r2_score(test_y, predic_y))
+        else:
+            vaf_average.append(vaf(test_y, predic_y))
+            
         if vaf_average[-1] > best_vaf:
             final_test_x = test_x
             final_test_y = test_y
             best_h = h
-
-    print(np.array(vaf_average))
+            final_test_index = test_index
+            best_vaf = vaf_average[-1]
+        if forced_test_index is not None:
+            final_test_x = X[forced_test_index,:]
+            final_test_y = Y[forced_test_index]
     
-    return best_h, np.average(np.array(vaf_average)), final_test_x, final_test_y
+    return best_h, np.average(vaf_average), final_test_x, final_test_y, final_test_index
+
+
+def decode_kfolds_single_nonlinear(X, Y, k=10, scoring='R2', forced_test_index = None):
+    kf = KFold(n_splits=k)
+    best_vaf=-1000000
+    vaf_average = []
+    for train_index, test_index in kf.split(X):
+        train_x, test_x = X[train_index, :], X[test_index,:]
+        train_y, test_y = Y[train_index], Y[test_index]
+        h, lsq=train_nonlinear_wiener_filter(train_x, train_y)
+        predic_y = test_nonlinear_wiener_filter(test_x, h, lsq)
+        if scoring=='R2':
+            vaf_average.append(r2_score(test_y, predic_y))
+        else:
+            vaf_average.append(vaf(test_y, predic_y))
+            
+        if vaf_average[-1] > best_vaf:
+            final_test_x = test_x
+            final_test_y = test_y
+            best_h = h
+            best_lsq = lsq
+            final_test_index = test_index
+            best_vaf = vaf_average[-1]
+        if forced_test_index is not None:
+            final_test_x = X[forced_test_index,:]
+            final_test_y = Y[forced_test_index]
+    
+    return best_h, best_lsq, np.average(vaf_average), final_test_x, final_test_y, final_test_index
+        
+        
 
 #def apply_PCA(X, dims):
 #    pca_output = PCA(n_components=dims, random_state=2020)
