@@ -456,46 +456,86 @@ class CortProcessor:
             print('did you run process_toe_height() yet?????')
 
 
-    def decode_phase(self, rates=None, angles=None, metric_angle='limbfoot'):
-        '''
-        this has a non-zero chance of returning overfit cos test cases
-        this probability is assumed to be less than the 1% predicted by random selection of kfolds
-        as the quality of the data along equally divded splits is assumed to be variable
-        '''
-        if rates is None and angles is None:
-            full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
-                        self.data['angles'])
+#     def decode_phase(self, rates=None, angles=None, metric_angle='limbfoot'):
+#         '''
+#         this has a non-zero chance of returning overfit cos test cases
+#         this probability is assumed to be less than the 1% predicted by random selection of kfolds
+#         as the quality of the data along equally divded splits is assumed to be variable
+#         '''
+#         if rates is None and angles is None:
+#             full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
+#                         self.data['angles'])
 
-        elif isinstance(rates, list):
-            full_rates, full_angles = self.stitch_and_format(rates, angles)
+#         elif isinstance(rates, list):
+#             full_rates, full_angles = self.stitch_and_format(rates, angles)
+#         else:
+#             full_rates = rates
+#             full_angles = angles
+        
+#         angle_number = self.angle_name_helper(metric_angle)
+#         phase_list = []
+        
+#         for i in range(full_angles.shape[1]):
+#             peak_list = tailored_peaks(full_angles, i, self.data['angle_names'][i])
+#             phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
+#             phase_list.append(phase_list_tmp)
+#         phase_list = np.array(phase_list).T
+#         sin_array, cos_array = sine_and_cosine(phase_list)
+        
+#         h_sin, r2_sin, test_rates, test_sin, sin_test_index = decode_kfolds(X=full_rates, Y=sin_array, metric_angle=angle_number, vaf_scoring=False)
+#         h_cos, r2_cos, _, test_cos, _ = decode_kfolds(X=full_rates, Y=cos_array, metric_angle=angle_number, vaf_scoring=False, forced_test_index = sin_test_index)
+#         predicted_sin = predicted_lines(test_rates, h_sin)
+#         predicted_cos = predicted_lines(test_rates, h_cos)
+#         # order_test = predicted_lines(test_rates, h_atantest)
+#         predicted_arctans = arctan_fn(predicted_sin, predicted_cos)
+#         test_arctans = phase_list[sin_test_index, :]
+        
+#         self.h_sin = h_sin
+#         self.h_cos = h_cos
+#         self.phase_list = phase_list
+
+#         return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates, phase_list
+
+    def phase_train(self):
+        rect_phase_list = []
+        for i in range(len(self.data['phase'])):
+            scrub_phase = ss_cleaner(self.data['phase'][i], 3)
+            rect_phase_list.append(scrub_phase)
+        form_rates, form_phase = self.stitch_and_format(self.data['rates'], rect_phase_list)
+        phase_12 = form_phase[np.nonzero(form_phase)]
+        rates_12 = form_rates[np.nonzero(form_phase),:][0]
+        phase_angles, swing_mean = get_phase_angles(phase_12)
+        sin_arr, cos_arr = sine_and_cosine(phase_angles)
+        h_sin_nl, lsq_sin, r2_sin_nl, test_rates, test_sin, sin_test_index = decode_kfolds_single_nonlinear(X=rates_12, Y=sin_arr, scoring='R2')
+        h_cos_nl, lsq_cos, r2_cos_nl, _, test_cos, _ = decode_kfolds_single_nonlinear(X=rates_12, Y=cos_arr, scoring='R2', forced_test_index = sin_test_index)
+        predicted_sin_nl = test_nonlinear_wiener_filter(test_rates, h_sin_nl, lsq_sin)
+        predicted_cos_nl = test_nonlinear_wiener_filter(test_rates, h_cos_nl, lsq_cos)
+        predicted_arctans_nl = arctan_fn(predicted_sin_nl, predicted_cos_nl)
+        test_arctans = phase_angles[sin_test_index]
+        
+        self.predicted_arctans_nl = predicted_arctans_nl
+        self.test_arctans = test_arctans
+        self.swing_mean = swing_mean
+        self.h_sin_nl = h_sin_nl
+        self.lsq_sin = lsq_sin
+        self.h_cos_nl = h_cos_nl
+        self.lsq_cos = lsq_cos
+        
+        return h_sin_nl, lsq_sin, h_cos_nl, lsq_cos, predicted_arctans_nl, test_arctans, swing_mean
+
+    def phase_evaluate(self, manual_threshold = None, refractory_tics = 0, bounds = [-4, 4], plotting = False):
+        if manual_threshold == None: 
+            threshold = self.swing_mean
         else:
-            full_rates = rates
-            full_angles = angles
-        
-        angle_number = self.angle_name_helper(metric_angle)
-        phase_list = []
-        
-        for i in range(full_angles.shape[1]):
-            peak_list = tailored_peaks(full_angles, i, self.data['angle_names'][i])
-            phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
-            phase_list.append(phase_list_tmp)
-        phase_list = np.array(phase_list).T
-        sin_array, cos_array = sine_and_cosine(phase_list)
-        
-        h_sin, r2_sin, test_rates, test_sin, sin_test_index = decode_kfolds(X=full_rates, Y=sin_array, metric_angle=angle_number, vaf_scoring=False)
-        h_cos, r2_cos, _, test_cos, _ = decode_kfolds(X=full_rates, Y=cos_array, metric_angle=angle_number, vaf_scoring=False, forced_test_index = sin_test_index)
-        predicted_sin = predicted_lines(test_rates, h_sin)
-        predicted_cos = predicted_lines(test_rates, h_cos)
-        # order_test = predicted_lines(test_rates, h_atantest)
-        predicted_arctans = arctan_fn(predicted_sin, predicted_cos)
-        test_arctans = phase_list[sin_test_index, :]
-        
-        self.h_sin = h_sin
-        self.h_cos = h_cos
-        self.phase_list = phase_list
-
-        return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates, phase_list
-
+            threshold = manual_threshold
+        crossingsA = np.diff(self.test_arctans >threshold, prepend=0)
+        np.put(crossingsA, np.where(crossingsA==-1), 0)
+        crossingsB = np.diff(self.predicted_arctans_nl >threshold, prepend=0)
+        np.put(crossingsB, np.where(crossingsB==-1), 0)
+        crossingsC = stim_cooldown(crossingsB, refractory_tics)
+        true_indicies, new_indicies, delay_array_list, spacing_mean = phase_sychrony(crossingsA, crossingsC)
+        score = phase_diagnositc(self.predicted_arctans_nl, self.test_arctans, self.swing_mean, true_indicies, new_indicies, delay_array_list, spacing_mean, bounds, plotting)
+        return score
     
     def get_H(self, H):
         if H == 'toe':
