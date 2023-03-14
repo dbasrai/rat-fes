@@ -534,8 +534,8 @@ class CortProcessor:
         np.put(crossingsB, np.where(crossingsB==-1), 0)
         crossingsC = stim_cooldown(crossingsB, refractory_tics)
         true_indicies, new_indicies, delay_array_list, spacing_mean = phase_sychrony(crossingsA, crossingsC)
-        score = phase_diagnositc(self.predicted_arctans_nl, self.test_arctans, self.swing_mean, true_indicies, new_indicies, delay_array_list, spacing_mean, bounds, plotting)
-        return score
+        true_score, effective_score = phase_diagnositc(self.predicted_arctans_nl, self.test_arctans, threshold, true_indicies, new_indicies, delay_array_list, spacing_mean, bounds, plotting)
+        return true_score, effective_score
     
     def get_H(self, H):
         if H == 'toe':

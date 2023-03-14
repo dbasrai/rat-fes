@@ -220,6 +220,27 @@ def phase_sychrony(crossings, crossings2):
     return true_index, new_index, delay_array_array, mean_spacing
 
 def phase_diagnositc(predicted_arctans_nl, test_arctans, swing_mean, true_index, new_index, delay_array_array, mean_spacing, bounds, plotting = False):
+    
+    true_scorer = []
+    for i in range(test_arctans.shape[0]):
+        if (test_arctans[i] < swing_mean) and (predicted_arctans_nl[i] < swing_mean):
+            true_scorer.append(1)
+        elif (test_arctans[i] >= swing_mean) and (predicted_arctans_nl[i] >= swing_mean):
+            true_scorer.append(1)
+        else:
+            true_scorer.append(0)
+    true_score = sum(true_scorer)/len(true_scorer)
+    print("general accuracy: {0:2.2f}%".format(true_score*100))
+    
+    tallywhacker = 0
+    for i in range(len(delay_array_array)):
+        if (delay_array_array[i].shape[0] == 1):
+            if (delay_array_array[i][0] >= bounds[0]) and (delay_array_array[i][0] <= bounds[-1]):
+                tallywhacker = tallywhacker +1
+    effective_score = tallywhacker/len(delay_array_array)
+    print("effective accuracy: {0:2.2f}%".format(effective_score*100))
+
+    
     if plotting == True:
         fig444, ax0= plt.subplots(1, 1, figsize=(9,6), sharex = True)
         tstest = np.linspace(0, (test_arctans.shape[0]*50)/1000,test_arctans.shape[0]) 
@@ -253,15 +274,8 @@ def phase_diagnositc(predicted_arctans_nl, test_arctans, swing_mean, true_index,
         ax1.axhline(y = bounds[0], c='g', linestyle = '--', label = 'acceptable range')
         ax1.legend()
         ax1.axhline(y = bounds[-1], c='g', linestyle = '--')
-    
-    tallywhacker = 0
-    for i in range(len(delay_array_array)):
-        if (delay_array_array[i].shape[0] == 1):
-            if (delay_array_array[i][0] >= bounds[0]) and (delay_array_array[i][0] <= bounds[-1]):
-                tallywhacker = tallywhacker +1
-    score = tallywhacker/len(delay_array_array)
-
-    return score
+     
+    return true_score, effective_score
 
 def stim_cooldown(crossingsB, refractory_tics):
     frac = np.copy(crossingsB)
