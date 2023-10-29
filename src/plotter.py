@@ -4,15 +4,16 @@ import numpy as np
 from src.wiener_filter import *
 from matplotlib.pyplot import cm
 
-def compass(angles, radii, arrowprops=None):
+def compass(angles, radii, swing_mean, legend, arrowprops=None):
     """
     credit to: https://ocefpaf.github.io/python4oceanographers/blog/2015/02/09/compass/
     """
 
     fig, ax = plt.subplots(subplot_kw=dict(polar=True))
-    ax.fill_between(np.linspace(0, np.pi, 100), 0,1, color = 'r', alpha = 0.5, label='Stance')
-    ax.fill_between(np.linspace(np.pi, 2*np.pi, 100), 0,1, color = 'g', alpha = 0.5, label = 'Swing')
-    ax.legend(loc='lower right')
+    ax.fill_between(np.linspace(0, np.radians(swing_mean), 100), 0,1, color = 'r', alpha = 0.225, label='Stance')
+    ax.fill_between(np.linspace(np.radians(swing_mean), 2*np.pi, 100), 0,1, color = 'g', alpha = 0.225, label = 'Swing')
+    if legend == True:
+        ax.legend(bbox_to_anchor=(1.4, 1.15), bbox_transform=ax.transAxes)
     kw = dict(arrowstyle="->", color='k')
     if arrowprops:
         kw.update(arrowprops)

@@ -1,6 +1,7 @@
 import numpy as np
 from src.filters import *
 from src.wiener_filter import *
+from src.phase_decoder_support import *
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
@@ -9,7 +10,9 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import Ridge
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
-def decode_kfolds(X, Y, metric_angle, k=10, preset_h=None, vaf_scoring=True, forced_test_index = None):
+from sklearn.utils import shuffle
+
+def decode_kfolds(X, Y, metric_angle, k=10, preset_h=None, forced_test_index = None):
     '''
     01/08/23
     inputs and outputs reorganized
@@ -21,9 +24,9 @@ def decode_kfolds(X, Y, metric_angle, k=10, preset_h=None, vaf_scoring=True, for
 
     h_list = []
 
-    vaf_array = np.zeros((Y.shape[1], k))
+    scores = np.zeros((Y.shape[1], k))
     index=0
-    best_vaf=-10000000
+    best_score=-10000000
     for train_index, test_index in kf.split(X):
 
 
@@ -35,14 +38,11 @@ def decode_kfolds(X, Y, metric_angle, k=10, preset_h=None, vaf_scoring=True, for
             h=preset_h
         predic_y = test_wiener_filter(test_x, h)
         for j in range(predic_y.shape[1]):
-            if vaf_scoring:
-                vaf_array[j, index] = vaf(test_y[:,j], predic_y[:,j])
-            else:
-                #use r^2 instead of VAF
-                vaf_array[j, index] = r2_score(test_y[:,j], predic_y[:,j])
+            scores[j, index] = corrcoef(test_y[:,j], predic_y[:,j])
             
-        if vaf_array[metric_angle, index] > best_vaf:
-            best_vaf = vaf_array[metric_angle, index]
+            
+        if scores[metric_angle, index] > best_score:
+            best_score = scores[metric_angle, index]
             best_h = h
             final_test_x = test_x
             final_test_y = test_y
@@ -53,15 +53,20 @@ def decode_kfolds(X, Y, metric_angle, k=10, preset_h=None, vaf_scoring=True, for
     if forced_test_index is not None:
         final_test_x = X[forced_test_index, :]
         final_test_y = Y[forced_test_index, :]
+        final_train_x = np.delete(X, forced_test_index, axis=0)
+        final_train_y = np.delete(Y, forced_test_index, axis=0)
+        final_test_y = Y[forced_test_index]
+        best_h=train_wiener_filter(final_train_x, final_train_y)
+        final_test_index = forced_test_index
         
     
-    return best_h, np.average(vaf_array, 1), final_test_x, final_test_y, final_test_index
+    return best_h, np.average(scores, 1), final_test_x, final_test_y, final_test_index
 
 
-def decode_kfolds_single(X, Y, k=10, preset_h=None, scoring='R2', forced_test_index = None):
+def decode_kfolds_single(X, Y, k=10, preset_h=None, forced_test_index = None):
     kf = KFold(n_splits=k)
-    best_vaf=-1000000
-    vaf_average = []
+    best_score=-1000000
+    scores = []
     for train_index, test_index in kf.split(X):
         train_x, test_x = X[train_index, :], X[test_index,:]
         train_y, test_y = Y[train_index], Y[test_index]
@@ -70,169 +75,139 @@ def decode_kfolds_single(X, Y, k=10, preset_h=None, scoring='R2', forced_test_in
         else:
             h=preset_h
         predic_y = test_wiener_filter(test_x, h)
-    
-        if scoring=='R2':
-            vaf_average.append(r2_score(test_y, predic_y))
-        else:
-            vaf_average.append(vaf(test_y, predic_y))
+        scores.append(corrcoef(test_y, predic_y))
             
-        if vaf_average[-1] > best_vaf:
+        if scores[-1] > best_score:
             final_test_x = test_x
             final_test_y = test_y
             best_h = h
             final_test_index = test_index
-            best_vaf = vaf_average[-1]
+            best_score = scores[-1]
         if forced_test_index is not None:
             final_test_x = X[forced_test_index,:]
             final_test_y = Y[forced_test_index]
     
-    return best_h, np.average(vaf_average), final_test_x, final_test_y, final_test_index
+    return best_h, np.average(scores), final_test_x, final_test_y, final_test_index
 
-
-def decode_kfolds_single_nonlinear(X, Y, k=10, scoring='R2', forced_test_index = None):
+def parallel_decoder(X, Y1, Y2, k=10, forced_test_index = None, printing = False):
     kf = KFold(n_splits=k)
-    best_vaf=-1000000
-    vaf_average = []
+    best_score=-1000000
+    circorr_average = []
+
+    for train_index, test_index in kf.split(X):
+        train_x, test_x = X[train_index, :], X[test_index,:]
+        train_y1, test_y1 = Y1[train_index], Y1[test_index]
+        train_y2, test_y2 = Y2[train_index], Y2[test_index]
+        h1=train_wiener_filter(train_x, train_y1)
+        h2=train_wiener_filter(train_x, train_y2)
+        pred_y1 = test_wiener_filter(test_x, h1)
+        pred_y2 = test_wiener_filter(test_x, h2)
+        arctan_test = arctan_fn(test_y1, test_y2)
+        arctan_pred = arctan_fn(pred_y1, pred_y2)
+        pred_y1_res, pred_y2_res = sine_and_cosine(arctan_pred)
+        circorr = corrcoef(arctan_test, arctan_pred)
+        
+        if printing == True:    
+            print(score)
+            
+        circorr_average.append(circorr)
+
+        if circorr > best_score:
+            final_test_x = test_x
+            final_test_y1 = test_y1
+            final_test_y1 = test_y1
+            best_h1 = h1
+            best_h2 = h2
+            final_testarc = arctan_test
+            final_predarc = arctan_pred
+            best_score = circorr
+            final_test_index = test_index
+    if forced_test_index is not None:
+        final_test_x = X[forced_test_index, :]
+        final_train_x = np.delete(X, forced_test_index, axis=0)
+        final_train_y1 = np.delete(Y1, forced_test_index)
+        final_test_y1 = Y1[forced_test_index]
+        final_train_y2 = np.delete(Y2, forced_test_index)
+        final_test_y2 = Y2[forced_test_index]
+        best_h1=train_wiener_filter(final_train_x, final_train_y1)
+        best_h2=train_wiener_filter(final_train_x, final_train_y2)
+        ft_pred_y1 = test_wiener_filter(final_test_x, best_h1)
+        ft_pred_y2 = test_wiener_filter(final_test_x, best_h2)
+        final_testarc = arctan_fn(final_test_y1, final_test_y2)
+        final_predarc = arctan_fn(ft_pred_y1, ft_pred_y2)
+    return np.average(circorr_average), best_h1, best_h2, final_test_x, final_testarc, final_predarc, final_test_index
+
+
+def null_hyopthesis_test_a(X, Y1, Y2, k=10, boots=10):  
+    bootstrapped_avg = []
+    for i in range(0,boots):
+        X = shuffle(X)
+        circorr_average = []
+        kf = KFold(n_splits=k)
+        for train_index, test_index in kf.split(X):
+            train_x, test_x = X[train_index, :], X[test_index,:]
+            train_y1, test_y1 = Y1[train_index], Y1[test_index]
+            train_y2, test_y2 = Y2[train_index], Y2[test_index]
+            h1=train_wiener_filter(train_x, train_y1)
+            h2=train_wiener_filter(train_x, train_y2)
+            pred_y1 = test_wiener_filter(test_x, h1)
+            pred_y2 = test_wiener_filter(test_x, h2)
+            arctan_test = arctan_fn(test_y1, test_y2)
+            arctan_pred = arctan_fn(pred_y1, pred_y2)
+            pred_y1_res, pred_y2_res = sine_and_cosine(arctan_pred)
+            circorr = corrcoef(arctan_test, arctan_pred)
+            circorr_average.append(circorr)
+        bootstrapped_avg.append(np.average(circorr_average))
+
+    return np.average(bootstrapped_avg)
+
+def null_hyopthesis_test_b(X, Y, metric_angle, k=10, boots=10):
+    bootstrapped_avg = []
+    for i in range(0,boots):
+        X = shuffle(X)
+        kf = KFold(n_splits=k)
+        scores = np.zeros((Y.shape[1], k))
+        index=0
+        for train_index, test_index in kf.split(X):
+            train_x, test_x = X[train_index, :], X[test_index, :]
+            train_y, test_y = Y[train_index, :], Y[test_index, :]
+            h=train_wiener_filter(train_x, train_y)
+            predic_y = test_wiener_filter(test_x, h)
+            for j in range(predic_y.shape[1]):
+                scores[j, index] = corrcoef(test_y[:,j], predic_y[:,j])
+            index = index+1
+        bootstrapped_avg.append(np.mean(scores, axis = 1))        
+
+    return np.mean(bootstrapped_avg, axis = 0)
+
+
+
+
+
+def decode_kfolds_single_nonlinear(X, Y, k=10, forced_test_index = None):
+    kf = KFold(n_splits=k)
+    best_score=-1000000
+    scores = []
     for train_index, test_index in kf.split(X):
         train_x, test_x = X[train_index, :], X[test_index,:]
         train_y, test_y = Y[train_index], Y[test_index]
         h, lsq=train_nonlinear_wiener_filter(train_x, train_y)
         predic_y = test_nonlinear_wiener_filter(test_x, h, lsq)
-        if scoring=='R2':
-            vaf_average.append(r2_score(test_y, predic_y))
-        else:
-            vaf_average.append(vaf(test_y, predic_y))
+        
+        scores.append(corrcoef(test_y, predic_y))
             
-        if vaf_average[-1] > best_vaf:
+        if scores[-1] > best_score:
             final_test_x = test_x
             final_test_y = test_y
             best_h = h
             best_lsq = lsq
             final_test_index = test_index
-            best_vaf = vaf_average[-1]
+            best_score = score_average[-1]
         if forced_test_index is not None:
             final_test_x = X[forced_test_index,:]
             final_test_y = Y[forced_test_index]
     
-    return best_h, best_lsq, np.average(vaf_average), final_test_x, final_test_y, final_test_index
-        
-        
-
-#def apply_PCA(X, dims):
-#    pca_output = PCA(n_components=dims, random_state=2020)
-#    pca_output.fit(X)
-
-#    X_pca_output = pca_output.transform(X)
-
-#    return X_pca_output, pca_output
-
-def classify_kfolds(X, Y, k=10):
-    #Y should be 0s or 1s I believe
-    kf = KFold(n_splits=k)
-
-    accuracy_list = []
-    best_accuracy=0
-    clf = make_pipeline(StandardScaler(), SGDClassifier(max_iter=10000,
-       tol=1e-3))
-    best_model = clf
-    for train_index, test_index in kf.split(rates):
-
-
-        train_x, test_x = rates[train_index, :], rates[test_index,:]
-        train_y, test_y = stance_swing[train_index], stance_swing[test_index]
-
-        clf.fit(train_x, train_y)
-        y_pred = clf.predict(test_x)
-        pred_accuracy = accuracy_score(test_y, y_pred)
-        accuracy_list.append(pred_accuracy)
-        if best_accuracy < pred_accuracy:
-            best_accuracy = pred_accuracy
-            best_model = clf
-            final_test_x = test_x
-            final_test_y = test_y
-    
-    return best_model, accuracy_list, final_test_x, final_test_y
-
-def ridge_fit(b0, x_format, y_format, my_alpha=100.0, angle_number=1):
-    #b0 = day0 decoder weights
-    #x = dayk x values (usually ALIGNED) (FORMATTED)
-    #y = dayk y values (FORMATTED)
-
-    xb0 = test_wiener_filter(x_format, b0)
-
-    initial_vaf = vaf(y_format[:,1], xb0[:,1])
-    print(f'initial_scoring is : {initial_vaf}')
-
-    y_star = y_format-xb0
-    x_plus_bias = np.c_[np.ones((np.size(x_format, 0), 1)), x_format]
-    
-    clf = Ridge(alpha=my_alpha)
-    clf.fit(x_plus_bias, y_star)
-
-    b = clf.coef_.T
-
-    wpost = b + b0
-
-    ywpost = test_wiener_filter(x_format, wpost)
-    new_vaf = vaf(y_format[:,angle_number], ywpost[:,angle_number])
-    print(f'new_scoring is: {new_vaf}')
-
-    return wpost, ywpost
-
-def regression_fit(b0, x, y, angle=1):
-    #b0 = day0 decoder weights
-    #x = dayk x values (usually PCA)
-    #y = dayk y values
-
-    x_format, y_format = format_data(x, y)
-    xb0 = test_wiener_filter(x_format, b0)
-
-    initial_vaf = vaf(y_format[:,1], xb0[:,1])
-    print(f'initial_scoring is : {initial_vaf}')
-
-    y_star = y_format-xb0
-    x_plus_bias = np.c_[np.ones((np.size(x_format, 0), 1)), x_format]
-    
-    clf = LinearRegression()
-    clf.fit(x_plus_bias, y_star)
-
-    b = clf.coef_.T
-
-    wpost = b + b0
-    ywpost = test_wiener_filter(x_format, wpost)
-    new_vaf = vaf(y_format[:,angle], ywpost[:,angle])
-
-    print(f'new_scoring is: {new_vaf}')
-
-    return wpost
-
-def pinv_fit(b0, x_format, y_format, angle=1):
-    b0_no_offset = b0[1:,:]
-    offset = b0[0,:]
-    inv_b0 = np.linalg.pinv(b0_no_offset)
-    #print(inv_b0.shape)
-    #x_format, y_format = format_data(x, y)    
-    y_star = np.dot(y_format - offset, inv_b0)
-    #x_plus_bias = np.c_[np.ones((np.size(x_format, 0), 1)), x_format]
-
-        
-
-    clf = LinearRegression()
-    clf.fit(x_format, y_star)
-
-    trans_x_format = clf.predict(x_format)
-    pinv_predic = np.dot(trans_x_format, b0_no_offset)+offset
-
-    return clf, pinv_predic
-
-def pinv_predicter(clf, b0, x_format):
-    b0_no_offset = b0[1:,:]
-    offset=b0[0,:]
-    trans_x_format = clf.predict(x_format)
-    return np.dot(trans_x_format, b0_no_offset) + offset
-
-
-
+    return best_h, best_lsq, np.average(score_average), final_test_x, final_test_y, final_test_index
 
 
 

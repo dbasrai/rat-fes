@@ -28,27 +28,27 @@ def threshold_crossings(neural, threshold): #this finds all upwards threshold cr
     
     return output.T, upward_indices_list
 
-def autothreshold_crossings(neural, multiplier): #this finds all upwards threshold crossings, no artifact detection
-    neural = neural.T
+# def autothreshold_crossings(neural, multiplier): #this finds all upwards threshold crossings, no artifact detection
+#     neural = neural.T
 
-    polarity=True #if threshold is positive
-    if multiplier < 0:
-        polarity=False
-    spikes = []
+#     polarity=True #if threshold is positive
+#     if multiplier < 0:
+#         polarity=False
+#     spikes = []
     
     
-    for channel in neural:
-        std = np.std(channel)
-        if polarity:
-            crossings = np.diff(channel > multiplier * std, prepend=0) #we get a 1
-            #right when it crosses. then 0s until it comes back/crosses again
-        else:
-            crossings = np.diff(channel < multiplier*std, prepend=0)
+#     for channel in neural:
+#         std = np.std(channel)
+#         if polarity:
+#             crossings = np.diff(channel > multiplier * std, prepend=0) #we get a 1
+#             #right when it crosses. then 0s until it comes back/crosses again
+#         else:
+#             crossings = np.diff(channel < multiplier*std, prepend=0)
 
-        np.put(crossings, np.where(crossings==-1), 0) #only catch crossing
-        spikes.append(crossings)
+#         np.put(crossings, np.where(crossings==-1), 0) #only catch crossing
+#         spikes.append(crossings)
 
-    return np.array(spikes).T #samples x spikes
+#     return np.array(spikes).T #samples x spikes
 
 
 def static_threshold_crossings(neural, thresholds, multiplier): #this finds all upwards threshold crossings, no artifact detection
@@ -82,6 +82,40 @@ def get_thresholds(neural, multiplier):
 
     return np.array(thresholds).T #samples x spikes
 
+def get_autothresholds(neural, fs, multiplier = -2.1, window = 5):
+    neural = neural.T
+    thresholds = []
+    multi = multiplier
+    for channel in neural:
+        threshold = np.zeros_like(channel)
+        segment_number = np.int(channel.shape[0]/(fs*window))
+        segment_length = np.int(channel.shape[0]/segment_number)
+        for i in range(0,segment_number):
+            if i < (segment_number-1):
+                std_noise = np.median(abs(channel[i*segment_length:(i+1)*segment_length]))/0.6745
+                thresh = multi*std_noise
+                threshold[i*segment_length:(i+1)*segment_length] = thresh
+            else:
+                std_noise = np.median(abs(channel[i*segment_length:]))/0.6745
+                thresh = multi*std_noise
+                threshold[i*segment_length:] = thresh
+        thresholds.append(threshold)
+
+    return np.array(thresholds).T
+
+def autothreshold_crossings(neural, thresholds):  # (negative peaks only)
+    neural = neural.T
+    thresholds =thresholds.T
+    spikes_tmp = []
+    for i in range(neural.shape[0]):
+        crossings = np.diff(neural[i,:] < thresholds[i,:], prepend=0)
+        np.put(crossings, np.where(crossings==-1), 0) #only catch crossing
+        spikes_tmp.append(crossings)
+
+    return np.array(spikes_tmp).T #samples x spikes
+
+
+
 def rolling_threshold_crossings(neural, fs, multiplier, wind):  # (negative peaks only)
     neural = neural.T
     refrac = 0.0005
@@ -98,7 +132,7 @@ def rolling_threshold_crossings(neural, fs, multiplier, wind):  # (negative peak
 
     return np.array(spikes_tmp).T #samples x spikes
 
-def refractory_limit(spikes_tmp, fs, refrac = 0.0005):  #accounts for an absolute refractory period to prevent jagged peaks from counting as multiple events
+def refractory_limit(spikes_tmp, fs, refrac = 0.001):  #accounts for an absolute refractory period to prevent jagged peaks from counting as multiple events
     spikes = []
     spikes_tmp = spikes_tmp.T
     length = spikes_tmp.shape[1]
@@ -128,7 +162,7 @@ def refractory_limit(spikes_tmp, fs, refrac = 0.0005):  #accounts for an absolut
     spikes = np.array(spikes, dtype = "int64").T
     return spikes
 
-def spike_binner(spikes, fs, binsize=0.05):
+def spike_binner(spikes, fs, binsize):
     spikes = spikes.T
 
     time = 1/fs

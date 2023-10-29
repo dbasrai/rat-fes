@@ -49,54 +49,9 @@ class CortProcessor:
             self.gait_indices = 'run get_gait_indices first'
             self.avg_gait_samples = 'run get_gait_indices first'
 
-        else:
-            print('this is filipe data i belive')
-            self.handler = sio.loadmat(folder_path)
-            self.gait_indices=None
-            self.avg_gait_samples=None
-            self.extract_filipe()
 
-    def extract_filipe(self):
-        self.data={}
-        #remoivng 0 rate channels, which
-        #throws an error in wiener filter
-        temp_rates = self.handler['SelectedSpikeData']
-        mask = np.average(temp_rates, 0) > .1
-        temp_rates_remove = temp_rates[:, mask]
-        self.data['rates'] = [temp_rates_remove]
 
-        self.data['coords'] = [self.handler['SelectedKinematicData']['kindata'][0,0]]
-        angles_temp = self.handler['SelectedKinematicData']['kinmeasures'][0,0][0,0]
-        self.data['angles'] = [np.squeeze(np.array(angles_temp.tolist())).T]
-        angle_names = ['ankle', 'limbfoot', 'hip', 'knee', 'toeheight']
-        self.data['angle_names'] = angle_names
 
-        temp_channels  =\
-        self.handler['SelectedFieldDatastruct']['FieldCh2Use'][0][0][0].tolist()
-        
-        which_channels = copy.deepcopy(temp_channels)
-        for idx in range(temp_rates.shape[1]):
-            if np.average(temp_rates[:, idx]) < .1:
-                baddy = temp_channels[idx]
-                which_channels.remove(baddy)
-
-        self.data['which_channels'] = which_channels
-#        samples = temp_rates.shape[0]
-#        num_channels = 32
-#        original_rates = np.zeros((samples, num_channels))
-#
-#        for idx in range(num_channels):
-#            if idx in which_channels:
-#                position = np.where(which_channels==idx)[0][0]
-#                if np.average(temp_rates[:, position]) > .1:
-#                    original_rates[:, idx] = temp_rates[:, position]
-#                else:
-#                    original_rates[:,idx] = np.nan
-#            else:
-#                original_rates[:,idx] = np.nan
-#
-#        self.data['original_rates'] = [original_rates]
-#
     def parse_config(self):
         '''
         this loads config.yaml file
@@ -142,96 +97,90 @@ class CortProcessor:
 
         return tdt_data_list, kin_data_list
 
-    def process(self, manual_crop_list=None, threshold_multiplier = -3.0, window = 60, binsize = 0.05, clear_storage = True):
-        """
-        1) takes raw neural data, then bandpass+notch filters, then extracts
-        spikes using threshold_multiplier, then bins into firing rates with bin
-        size
-        2) takes coordinates/angles, then resamples at 20 HZ
-        3) saves all under CortHandler.data
 
-        crop is automatically read from config.yaml file, unless manual crop
-        list is set.
-        """
+    def process(self, manual_crop_list=None, binsize = 0.05, multi = -2.1, override = True):
+
         if self.crop_list is not None:
             crop_list = self.crop_list
         elif manual_crop_list is not None:
             crop_list = manual_crop_list
         else:
-            #TODO
             print('need to make it so that it is uncropped')
 
         tdt_data_list = self.tdt_data
         kin_data_list = self.kin_data
 
-        self.data = {}
-
-        self.data['bodyparts'] = kin_data_list[0]['bodyparts']
-        self.data['angle_names'] = kin_data_list[0]['angles_list']
-        
-        self.data['rates']=[]
-        self.data['coords']=[]
-        self.data['angles']=[]
-        self.data['phase'] = []
-                
+        if override == True:
+            self.binsize = binsize
+            self.data = {}
+            self.data['bodyparts'] = kin_data_list[0]['bodyparts']
+            self.data['angle_names'] = kin_data_list[0]['angles_list']
+            self.data['rates']=[]
+            self.data['coords']=[]
+            self.data['angles']=[]
+            self.data['phase'] = []
+            self.data['fnum'] = []
+        else:
+            data = {}
+            data['bodyparts'] = kin_data_list[0]['bodyparts']
+            data['angle_names'] = kin_data_list[0]['angles_list']
+            data['rates']=[]
+            data['coords']=[]
+            data['angles']=[]
+            data['phase'] = []
+            data['fnum'] = []
+            data['crossings']= []
+            
         for i in range(len(tdt_data_list)):
-            #syncs neural data/kinematic data, then crops
-            self.tdt_data[i], self.kin_data[i] = self.crop_data(tdt_data_list[i], 
-                    kin_data_list[i], crop_list[i])
+            self.tdt_data[i], self.kin_data[i] = self.crop_data(tdt_data_list[i], kin_data_list[i], crop_list[i])
             
-            fs = self.tdt_data[i]['fs'] #quick accessible variable
-            neural = self.tdt_data[i]['neural'] #quick accessible variable
-            
-            #notch and bandpass filter
-            
-            ##common mode rejection assumes equal impedence and is therefore not recommended 
-            # means = np.mean(neural, axis = 1)
-            # commonmode = []
-            # for j in range(neural.shape[1]):
-            #     commonhold = neural[:,j] - means
-            #     commonmode.append(commonhold)
-            # commonmode = np.array(commonmode).T
-            
-            half_filtered_neural = fresh_filt(neural, 350, 8000, fs, order = 4)
+            fs = self.tdt_data[i]['fs']
+            neural = self.tdt_data[i]['neural']
+        
+            half_filtered_neural = fresh_filt(neural, 300, 8000, fs, order = 4)
             filtered_neural = notch_filter(half_filtered_neural, fs)
-            clean_filtered_neural = remove_artifacts(filtered_neural, fs)
             
-            #extract spikes with rolling window stdv
-            spikes = rolling_threshold_crossings(clean_filtered_neural, fs,
-                    threshold_multiplier, window)
+            thresholds = get_autothresholds(filtered_neural, fs, multi)
+            clean_filtered_neural = remove_artifacts(filtered_neural, fs)
+            spikes= autothreshold_crossings(clean_filtered_neural, thresholds)
             firing_rates = spike_binner(spikes, fs, binsize)
             
-            #old processing method
-            # spikes = autothreshold_crossings(clean_filtered_neural,
-            #         threshold_multiplier)
-            # firing_rates = spike_binner(spikes, fs, binsize)
-                                
-            self.data['rates'].append(firing_rates)
+            if override == True:                    
+                self.data['rates'].append(firing_rates)
+            else:
+                data['rates'].append(firing_rates)
 
-            temp_angles = self.kin_data[i]['angles'] #quick accessible variable
+            temp_angles = self.kin_data[i]['angles']
             temp_coords = self.kin_data[i]['coords'] 
             temp_phase = self.kin_data[i]['phase'] 
-            
+            temp_frames = self.kin_data[i]['fnum'] 
 
-            #resample at same frequency of binned spikes
-            resampled_angles = resample(temp_angles, firing_rates.shape[0],
-                    axis=0)
-            resampled_coords = resample(temp_coords, firing_rates.shape[0],
-                    axis=0)
+            resampled_angles = resample(temp_angles, firing_rates.shape[0], axis=0)
+            resampled_coords = resample(temp_coords, firing_rates.shape[0], axis=0)
             resampled_phase = self.resample_mode(temp_phase, firing_rates.shape[0])
-                
-            self.data['angles'].append(resampled_angles)
-            self.data['coords'].append(resampled_coords)
-            self.data['phase'].append(resampled_phase)
+            resampled_frames = self.resample_mode(temp_frames, firing_rates.shape[0])
 
-            #remove raw data to save memory
-            if clear_storage == True:
+            if override == True:
+                self.data['angles'].append(resampled_angles)
+                self.data['coords'].append(resampled_coords)
+                self.data['phase'].append(resampled_phase)
+                self.data['fnum'].append(resampled_frames)
                 self.tdt_data[i] = 0
                 self.kin_data[i] = 0 
+            else:
+                data['angles'].append(resampled_angles)
+                data['coords'].append(resampled_coords)
+                data['phase'].append(resampled_phase)
+                data['fnum'].append(resampled_frames)
+                data['crossings'].append(spikes)
+
             gc.collect()
-        
-        #returning stitched rates --- we don't directly use this for anything.     
-        return np.vstack(self.data['rates']), np.vstack(self.data['angles']), np.hstack(self.data['phase'])
+            
+        if override == True:
+            return np.vstack(self.data['rates']), np.vstack(self.data['angles']), np.hstack(self.data['phase'])
+        else:
+            return np.vstack(data['rates']), np.vstack(data['angles']), np.hstack(data['phase'])#, np.vstack(data['crossings'])
+
     
     def resample_mode(self, phase, shape):
         re = resample(phase, shape, axis=0)
@@ -456,73 +405,124 @@ class CortProcessor:
             print('did you run process_toe_height() yet?????')
 
 
-#     def decode_phase(self, rates=None, angles=None, metric_angle='limbfoot'):
-#         '''
-#         this has a non-zero chance of returning overfit cos test cases
-#         this probability is assumed to be less than the 1% predicted by random selection of kfolds
-#         as the quality of the data along equally divded splits is assumed to be variable
-#         '''
-#         if rates is None and angles is None:
-#             full_rates, full_angles = self.stitch_and_format(self.data['rates'], 
-#                         self.data['angles'])
-
-#         elif isinstance(rates, list):
-#             full_rates, full_angles = self.stitch_and_format(rates, angles)
-#         else:
-#             full_rates = rates
-#             full_angles = angles
+    def phase_train(self, upper_limit = 10, lower_limit = 10, angles = None, phase = None, rates = None,  forcible_test_index = None):     
+        if angles is None:
+            angles = self.data['angles']
+        if phase is None:
+            phase = self.data['phase']
+        if rates is None:
+            rates = self.data['rates']
         
-#         angle_number = self.angle_name_helper(metric_angle)
-#         phase_list = []
-        
-#         for i in range(full_angles.shape[1]):
-#             peak_list = tailored_peaks(full_angles, i, self.data['angle_names'][i])
-#             phase_list_tmp = to_phasex(peak_list, full_angles[:,i])
-#             phase_list.append(phase_list_tmp)
-#         phase_list = np.array(phase_list).T
-#         sin_array, cos_array = sine_and_cosine(phase_list)
-        
-#         h_sin, r2_sin, test_rates, test_sin, sin_test_index = decode_kfolds(X=full_rates, Y=sin_array, metric_angle=angle_number, vaf_scoring=False)
-#         h_cos, r2_cos, _, test_cos, _ = decode_kfolds(X=full_rates, Y=cos_array, metric_angle=angle_number, vaf_scoring=False, forced_test_index = sin_test_index)
-#         predicted_sin = predicted_lines(test_rates, h_sin)
-#         predicted_cos = predicted_lines(test_rates, h_cos)
-#         # order_test = predicted_lines(test_rates, h_atantest)
-#         predicted_arctans = arctan_fn(predicted_sin, predicted_cos)
-#         test_arctans = phase_list[sin_test_index, :]
-        
-#         self.h_sin = h_sin
-#         self.h_cos = h_cos
-#         self.phase_list = phase_list
-
-#         return h_sin, h_cos, np.mean((r2_sin,r2_cos), axis=0), predicted_arctans, test_arctans, test_rates, phase_list
-
-    def phase_train(self):
         rect_phase_list = []
-        for i in range(len(self.data['phase'])):
-            scrub_phase = ss_cleaner(self.data['phase'][i], 3)
-            rect_phase_list.append(scrub_phase)
-        form_rates, form_phase = self.stitch_and_format(self.data['rates'], rect_phase_list)
+        for i in range(len(phase)):
+            phase_copy = np.copy(phase[i])
+            phase_copy = phase_copy + 1 
+            phase_copy[0] = 0 
+            phase_copy[-1] = 0
+            rect_phase_list.append(phase_copy)
+        form_rates, preform_phase = self.stitch_and_format(rates, rect_phase_list)      
+        form_phase = drop_phase(preform_phase, upper_limit, lower_limit)
         phase_12 = form_phase[np.nonzero(form_phase)]
         rates_12 = form_rates[np.nonzero(form_phase),:][0]
-        phase_angles, swing_mean = get_phase_angles(phase_12)
-        sin_arr, cos_arr = sine_and_cosine(phase_angles)
-        h_sin_nl, lsq_sin, r2_sin_nl, test_rates, test_sin, sin_test_index = decode_kfolds_single_nonlinear(X=rates_12, Y=sin_arr, scoring='R2')
-        h_cos_nl, lsq_cos, r2_cos_nl, _, test_cos, _ = decode_kfolds_single_nonlinear(X=rates_12, Y=cos_arr, scoring='R2', forced_test_index = sin_test_index)
-        predicted_sin_nl = test_nonlinear_wiener_filter(test_rates, h_sin_nl, lsq_sin)
-        predicted_cos_nl = test_nonlinear_wiener_filter(test_rates, h_cos_nl, lsq_cos)
-        predicted_arctans_nl = arctan_fn(predicted_sin_nl, predicted_cos_nl)
-        test_arctans = phase_angles[sin_test_index]
-        
-        self.predicted_arctans_nl = predicted_arctans_nl
+        phase_angles, swing_mean = get_phase_angles(phase_12)    
+        sin_arr, cos_arr = sine_and_cosine(phase_angles)    
+        _, form_angles = self.stitch_and_format(rates,angles)
+        angles_12 = form_angles[np.nonzero(form_phase),:][0]
+        metric = self.angle_name_helper('limbfoot')
+        phase_score, h_sin, h_cos, test_rates, test_arctans, predicted_arctans, final_test_index = parallel_decoder(X=rates_12, Y1=sin_arr, Y2=cos_arr, forced_test_index=forcible_test_index, printing = False)
+        h_angle, angle_scores, _, test_angle, _ = decode_kfolds(rates_12,angles_12,metric_angle=metric, forced_test_index = final_test_index)
+    
+        self.predicted_arctans = predicted_arctans
         self.test_arctans = test_arctans
         self.swing_mean = swing_mean
-        self.h_sin_nl = h_sin_nl
-        self.lsq_sin = lsq_sin
-        self.h_cos_nl = h_cos_nl
-        self.lsq_cos = lsq_cos
+        self.h_sin_nl = h_sin
+        self.h_cos_nl = h_cos
         
-        return h_sin_nl, lsq_sin, h_cos_nl, lsq_cos, predicted_arctans_nl, test_arctans, swing_mean
+        return phase_score, angle_scores, h_sin, h_cos, predicted_arctans, test_arctans, test_rates, swing_mean, h_angle, test_angle, final_test_index  
+    
+    def null_test(self, boots = 100):     
+        angles = self.data['angles']
+        phase = self.data['phase']
+        rates = self.data['rates']
+        rect_phase_list = []
+        for i in range(len(phase)):
+            phase_copy = np.copy(phase[i])
+            for j in range(phase_copy.shape[0]):
+                phase_copy[j] = phase_copy[j] + 1
+            phase_copy[0] = 0 
+            phase_copy[-1] = 0
+            rect_phase_list.append(phase_copy)
+        form_rates, preform_phase = self.stitch_and_format(rates, rect_phase_list)
+        form_phase = drop_phase(preform_phase, 10, 10)
+        phase_12 = form_phase[np.nonzero(form_phase)]
+        rates_12 = form_rates[np.nonzero(form_phase),:][0]
+        phase_angles, swing_mean = get_phase_angles(phase_12)    
+        sin_arr, cos_arr = sine_and_cosine(phase_angles)    
+        _, form_angles = self.stitch_and_format(rates,angles)
+        angles_12 = form_angles[np.nonzero(form_phase),:][0]
+        metric = self.angle_name_helper('limbfoot')
+        phase_score, h_sin, h_cos, test_rates, test_arctans, predicted_arctans, final_test_index = parallel_decoder(X=rates_12, Y1=sin_arr, Y2=cos_arr, forced_test_index=None, printing = False)
+        h_angle, angle_scores, _, test_angle, _ = decode_kfolds(rates_12,angles_12,metric_angle=metric, forced_test_index = final_test_index)
 
+        null_test_alpha = null_hyopthesis_test_a(X=rates_12, Y1=sin_arr, Y2=cos_arr, boots = boots)
+        null_test_beta = null_hyopthesis_test_b(rates_12,angles_12,metric_angle=metric, boots = boots)
+        
+        self.predicted_arctans = predicted_arctans
+        self.test_arctans = test_arctans
+        self.swing_mean = swing_mean
+        self.h_sin_nl = h_sin
+        self.h_cos_nl = h_cos
+        
+        return phase_score, null_test_alpha, angle_scores, null_test_beta, phase_angles
+    
+    
+    def exclusion_train(self, upper_limit, lower_limit, exclusion_index):
+       
+        angles = self.data['angles']
+        phase = self.data['phase']
+        rates = self.data['rates']
+        
+        rect_phase_list = []
+        for i in range(len(phase)):
+            phase_copy = np.copy(phase[i])
+            for j in range(phase_copy.shape[0]):
+                phase_copy[j] = phase_copy[j] + 1
+            phase_copy[0] = 0 
+            phase_copy[-1] = 0
+            rect_phase_list.append(phase_copy)
+        temp_rates, pre_temp_phase = self.stitch_and_format(rates, rect_phase_list)        
+        temp_phase = drop_phase(pre_temp_phase, 3.1, 1)
+                
+        phase_21 = temp_phase[np.nonzero(temp_phase)]
+        rates_21 = temp_rates[np.nonzero(temp_phase),:][0]
+        
+        test_rates = rates_21[exclusion_index, :]
+        form_rates = np.delete(rates_21, exclusion_index, axis=0)
+        test_phase = phase_21[exclusion_index]
+        preform_phase = np.delete(phase_21, exclusion_index)  
+        form_phase = drop_phase(preform_phase, upper_limit, lower_limit)
+    
+        phase_12 = form_phase[np.nonzero(form_phase)]
+        rates_12 = form_rates[np.nonzero(form_phase),:][0]
+        test_arctans, _ = get_phase_angles(test_phase)
+        phase_angles, swing_mean = get_phase_angles(phase_12)
+        sin_arr, cos_arr = sine_and_cosine(phase_angles)    
+        score, h_sin, h_cos, _, _, _, _ = parallel_decoder(X=rates_12, Y1=sin_arr, Y2=cos_arr, k=8, printing = False)
+        
+        
+        pred_sin = test_wiener_filter(test_rates, h_sin)
+        pred_cos = test_wiener_filter(test_rates, h_cos)        
+        predicted_arctans = arctan_fn(pred_sin, pred_cos)
+        
+        # _, form_angles = self.stitch_and_format(rates,angles)
+        # angles_12 = form_angles[np.nonzero(form_phase),:][0]
+        # metric = self.angle_name_helper('limbfoot')
+        # h_angle, vaf_array, test_angle_rates, test_angle_angle, _ = decode_kfolds(rates_12,angles_12,metric_angle=metric, vaf_scoring = False, forced_test_index = final_test_index)
+        # , vaf_array, h_angle, test_angle_rates, test_angle_angle
+        
+        return score, h_sin, h_cos, predicted_arctans, test_arctans, test_rates, swing_mean
+    
+    
     def phase_evaluate(self, manual_threshold = None, refractory_tics = 0, bounds = [-4, 4], plotting = False):
         if manual_threshold == None: 
             threshold = self.swing_mean
@@ -530,11 +530,11 @@ class CortProcessor:
             threshold = manual_threshold
         crossingsA = np.diff(self.test_arctans >threshold, prepend=0)
         np.put(crossingsA, np.where(crossingsA==-1), 0)
-        crossingsB = np.diff(self.predicted_arctans_nl >threshold, prepend=0)
+        crossingsB = np.diff(self.predicted_arctans >threshold, prepend=0)
         np.put(crossingsB, np.where(crossingsB==-1), 0)
         crossingsC = stim_cooldown(crossingsB, refractory_tics)
         true_indicies, new_indicies, delay_array_list, spacing_mean = phase_sychrony(crossingsA, crossingsC)
-        true_score, effective_score = phase_diagnositc(self.predicted_arctans_nl, self.test_arctans, threshold, true_indicies, new_indicies, delay_array_list, spacing_mean, bounds, plotting)
+        true_score, effective_score = phase_diagnositc(self.predicted_arctans, self.test_arctans, threshold, true_indicies, new_indicies, delay_array_list, spacing_mean, bounds, plotting)
         return true_score, effective_score
     
     def get_H(self, H):
@@ -661,4 +661,40 @@ class CortProcessor:
     def bodypart_helper(self, bodypart):
         return self.data['bodyparts'].index(bodypart)
     
-    
+    def DOM(self, upper_limit, lower_limit, legend=False):
+        phase = self.data['phase']
+        rates = self.data['rates']
+        rect_phase_list = []
+        for i in range(len(phase)):
+            phase_copy = np.copy(phase[i])
+            for j in range(phase_copy.shape[0]):
+                phase_copy[j] = phase_copy[j] + 1
+            phase_copy[0] = 0 
+            phase_copy[-1] = 0
+            rect_phase_list.append(phase_copy)
+        form_rates, preform_phase = self.stitch_and_format(rates, rect_phase_list)
+        form_phase = drop_phase(preform_phase, upper_limit, lower_limit)
+        phase_12 = form_phase[np.nonzero(form_phase)]
+        rates_rs = form_rates[np.nonzero(form_phase),:][0]
+        phase_angles, swing_mean = get_phase_angles(phase_12)
+        phase_rs = np.radians(phase_angles-180)
+        magn = []
+        heading = []
+        for j in range(rates_rs.shape[1]):
+            sum1 = 0
+            sum_sin = 0
+            sum_cos = 0
+            for i in range(rates_rs.shape[0]):
+                sum1 = sum1 + rates_rs[i,j]
+                sum_sin = sum_sin + rates_rs[i,j]*np.sin(phase_rs[i])
+                sum_cos = sum_cos + rates_rs[i,j]*np.cos(phase_rs[i])
+            sin_bar = sum_sin/sum1
+            cos_bar = sum_cos/sum1
+            r = (sin_bar**2 + cos_bar**2)**(1/2)
+            theta = np.arctan2(sin_bar, cos_bar)
+            magn.append(r)
+            heading.append(theta)
+        magn = np.array(magn)
+        heading = np.array(heading)
+        compass(heading, magn, swing_mean, legend)
+        return
